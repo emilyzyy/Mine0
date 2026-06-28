@@ -15,16 +15,26 @@ The goal is not to train a new end-to-end policy from scratch. The goal is to co
 - structured verification
 - memory-based adaptation from prediction error
 
+## User Prompt Entry Point
+
+Mine0 should start from a **prompt box** where the user tells the agent what to do in natural language rather than selecting from a preset task list or fixed action menu.
+
+Examples:
+
+- `Get me a wooden pickaxe`
+- `Gather wood and make a crafting table`
+- `Find a safer area and avoid the river`
+- `Collect stone for early tools`
+
+The planner should treat this prompt as the active objective, decompose it into bounded subgoals, and replan continuously as the world changes.
+
 ## Demo Goal
 
-The initial polished demo should run in a controlled survival world and:
+The initial polished demo should still use a controlled survival world and a simple first objective such as:
 
-1. inspect the environment
-2. gather wood
-3. craft a crafting table
-4. obtain a wooden or stone pickaxe
+`Gather wood, craft a crafting table, and obtain a wooden or stone pickaxe.`
 
-Use a fixed seed with nearby trees and exposed stone. The compelling part is not reaching diamonds. The compelling part is watching several planning branches disagree, simulate outcomes, select a plan, act, discover whether they were right, and adapt.
+Use a fixed seed with nearby trees and exposed stone. The compelling part is not reaching diamonds. The compelling part is watching several planning branches disagree, simulate outcomes, select a plan, act, discover whether they were right, and adapt after the user gives Mine0 a natural-language objective.
 
 ## System Overview
 
@@ -47,7 +57,7 @@ This is an online planning loop with in-context adaptation through memory, not g
 
 - Vision must matter. Do not give the planner a perfect list of nearby blocks if the screenshot is supposed to drive scene understanding.
 - Planning outputs must be structured JSON, not vague prose.
-- Execution must be bounded, allowlisted, and verifiable.
+- Execution must be bounded and verifiable.
 - Memory should influence future decisions through retrieval, not weight updates.
 - The first milestone should optimize for reliability and observability, not action-space breadth.
 
@@ -57,15 +67,16 @@ Mine0 supports two interchangeable embodiment backends.
 
 ### Option A: JARVIS-VLA
 
-JARVIS-VLA is the more visually impressive backend because Gemma imagines and selects the future, while a pretrained VLA physically realizes it through visual keyboard-and-mouse control.
+JARVIS-VLA is the **primary** embodiment backend. It is the preferred path because Gemma can plan in natural language and JARVIS can directly execute bounded atomic instructions through visual keyboard-and-mouse control.
 
 High-level flow:
 
-1. Gemma produces a bounded atomic instruction such as `Collect three oak logs`
-2. JARVIS-VLA receives the instruction plus the Minecraft observation
-3. JARVIS-VLA executes low-level controls through MineStudio
-4. the system returns the resulting observation and state
-5. Mine0 verifies whether the result matched the prediction
+1. the user enters a natural-language objective in the prompt box
+2. Gemma decomposes that objective into a bounded atomic instruction such as `Collect three oak logs`
+3. JARVIS-VLA receives the instruction plus the Minecraft observation
+4. JARVIS-VLA executes low-level controls through MineStudio
+5. the system returns the resulting observation and state
+6. Mine0 verifies whether the result matched the prediction
 
 Suggested positioning:
 
@@ -83,7 +94,7 @@ References:
 
 ### Option B: Mineflayer
 
-Mineflayer is the more controllable engineering path and likely the better first implementation path for a reliable demo.
+Mineflayer is the **backup** embodiment backend in case JARVIS-VLA proves too difficult or unstable to get working for the first demo.
 
 Mineflayer already supports:
 
@@ -96,7 +107,7 @@ Mineflayer already supports:
 
 Use `prismarine-viewer` to render the first-person image for Gemma.
 
-In this mode, Gemma selects only allowlisted macro-actions such as:
+In this fallback mode, Gemma can still reason from the user's freeform prompt, but the executor may need to translate the chosen intent into a smaller set of validated skills such as:
 
 - `scan(direction)`
 - `explore(direction)`
@@ -111,21 +122,20 @@ Stretch actions for later:
 - `retreat()`
 - combat-related actions
 
-This mode resembles Voyager’s idea of an LLM operating Minecraft through high-level executable skills, but Mine0’s contribution is multimodal, parallel-future planning powered by Cerebras.
+This mode resembles Voyager’s idea of an LLM operating Minecraft through high-level executable skills, but Mine0’s contribution is multimodal, parallel-future planning powered by Cerebras. Mineflayer is not the main product vision; it is the fallback body if the JARVIS path is blocked.
 
 ## Recommended Phase 1 Choice
 
-Start with **Mineflayer + prismarine-viewer** for the first end-to-end demo.
+Start with **JARVIS-VLA as the intended primary backend** and keep **Mineflayer + prismarine-viewer** ready as the contingency path if JARVIS integration cannot be stabilized quickly enough.
 
-Reasons:
+Recommended sequencing:
 
-- easier to debug and verify
-- lower execution variance
-- simpler success detection
-- faster iteration on planner interfaces
-- less risk than integrating a full visuomotor model at the start
+- design the planner around freeform user objectives from the prompt box
+- define the executor interface around bounded atomic instructions
+- attempt JARVIS-VLA integration first
+- maintain Mineflayer as the fallback executor for demo reliability
 
-Keep the abstraction boundary clean so JARVIS-VLA can be added later without changing the planner contracts.
+Keep the abstraction boundary clean so both backends can share the same planner contracts.
 
 ## Role Split
 
@@ -137,7 +147,7 @@ Input:
 
 - Minecraft screenshot
 - structured state
-- goal
+- user prompt / objective
 - retrieved memories
 
 Output:
@@ -149,6 +159,7 @@ Responsibilities:
 - Cerebras / Gemma API client
 - image formatting and structured outputs
 - Gemma perception agent
+- user-prompt interpretation
 - goal decomposition
 - concurrent planner agents
 - parallel future rollout agents
@@ -159,12 +170,13 @@ Responsibilities:
 
 Pipeline:
 
-`Screenshot + WorldState + Goal + Memory -> Perception -> Competing Plans -> Imagined Futures -> Critic -> Selected Instruction`
+`Screenshot + WorldState + UserObjective + Memory -> Perception -> Competing Plans -> Imagined Futures -> Critic -> Selected Instruction`
 
 Example output:
 
 ```json
 {
+  "objective": "Get me a wooden pickaxe",
   "instruction": "Collect three oak logs",
   "success_condition": {
     "item": "oak_log",
@@ -202,13 +214,15 @@ Pipeline:
 
 ### Shared Interface
 
-Only three objects should cross between the two roles:
+Only three core objects should cross between the two roles:
 
 - `WorldState`
 - `SubgoalIntent`
 - `ActionOutcome`
 
 This keeps both teammates from editing the same modules and keeps the backend swappable.
+
+The user prompt should enter the system as a separate top-level input that Role 1 owns and interprets.
 
 ## Canonical Data Contracts
 
@@ -223,7 +237,7 @@ The core pipeline should be:
 ```json
 {
   "timestamp": "2026-06-28T17:00:00Z",
-  "goal": "obtain_stone_pickaxe",
+  "user_objective": "Get me a stone pickaxe",
   "position": {"x": 120.5, "y": 65.0, "z": -31.2},
   "biome_or_region_hint": "forest_edge",
   "health": 20,
@@ -246,7 +260,7 @@ Suggested fields:
 - health and hunger
 - position
 - time of day
-- current objective
+- current user objective
 - coarse progress toward objective
 - perceived resources
 - hazards
@@ -256,7 +270,7 @@ Do not expose a perfect machine-readable list of all nearby blocks to the planne
 
 ### CandidateAction
 
-All actions should be strict, allowlisted, and validated against schema.
+All action proposals should be strict, validated against schema, and compatible with the selected executor.
 
 ```json
 {
@@ -269,7 +283,7 @@ All actions should be strict, allowlisted, and validated against schema.
 }
 ```
 
-Recommended initial allowlist:
+For the Mineflayer fallback path, the recommended initial skill allowlist is:
 
 - `scan(direction)`
 - `explore(direction)`
@@ -371,7 +385,7 @@ This scene model should be merged into `WorldState.scene_summary`.
 
 ### Planner Stage
 
-Use 3 planner agents to propose distinct high-level strategies for the current state. Examples:
+Use 3 planner agents to propose distinct high-level strategies for the current state and user prompt. Examples:
 
 - gather wood immediately
 - move toward exposed stone first if already enough wood exists
@@ -400,7 +414,7 @@ The critic should score futures with a fixed rubric rather than freeform prefere
 
 Suggested scoring factors:
 
-- goal progress
+- objective progress
 - success probability
 - risk
 - time cost
@@ -465,7 +479,7 @@ Store:
 
 Retrieve experiences by:
 
-- goal
+- user objective
 - action type
 - environment tags
 - failure type
@@ -476,7 +490,7 @@ Retrieve experiences by:
 
 A reusable skill is:
 
-- a successful sequence of allowlisted macro-actions
+- a successful sequence of bounded actions or validated fallback skills
 - plus the preconditions under which that sequence tends to work
 
 ### Failure Policy
@@ -592,20 +606,21 @@ Build:
 
 Success criteria:
 
-- `WorldState`, `SubgoalIntent`, and `ActionOutcome` flow through a mocked loop end to end
+- `WorldState`, `SubgoalIntent`, and `ActionOutcome` flow through a mocked loop end to end, driven by a freeform user prompt
 
 ### Phase 1: Reliable Minecraft Loop
 
 Build:
 
-- Mineflayer backend
-- screenshot capture with prismarine-viewer
-- state extraction
+- executor interface for bounded atomic instructions
+- JARVIS-VLA backend attempt
+- screenshot capture and state extraction
+- Mineflayer fallback backend with prismarine-viewer
 - bounded action execution
 
 Success criteria:
 
-- scripted allowlisted actions can execute and return structured outcomes
+- a prompt-box objective can be turned into an executable bounded instruction and return a structured outcome through at least one backend
 
 ### Phase 2: Perception and Planner
 
@@ -648,17 +663,18 @@ Success criteria:
 
 - polished live demo on fixed seed
 
-### Phase 5: JARVIS-VLA Backend
+### Phase 5: Backend Hardening and Parity
 
 Build:
 
-- MineStudio integration
-- JARVIS executor adapter
-- parity with executor interface
+- full MineStudio integration
+- JARVIS executor hardening
+- Mineflayer fallback parity
+- backend swap testing
 
 Success criteria:
 
-- planner can swap from Mineflayer to JARVIS without changing upstream contracts
+- planner can swap between JARVIS and Mineflayer without changing upstream contracts
 
 ## Risks and Mitigations
 
@@ -674,17 +690,25 @@ Mitigation:
 Mitigation:
 
 - strict JSON schema
-- allowlisted actions
+- executor-side capability checks
 - argument validation
 - executor-side safety checks
+
+### Risk: JARVIS integration instability
+
+Mitigation:
+
+- keep Mineflayer as a fully usable fallback backend
+- preserve a backend-agnostic executor contract
+- reduce the first demo to a constrained world and bounded objectives
 
 ### Risk: Demo instability
 
 Mitigation:
 
 - use a fixed seed
-- reduce action space
-- start with Mineflayer
+- reduce action scope
+- keep the first prompt objective narrow
 - cap action duration and retries
 
 ### Risk: Planning latency hides Cerebras value
@@ -706,14 +730,16 @@ Mitigation:
 The next concrete build target should be:
 
 1. define the typed `WorldState -> CandidateAction -> PredictedFuture -> ActionOutcome` contracts
-2. build a pluggable executor interface
-3. implement the Mineflayer execution backend first
-4. add screenshot capture and state extraction
-5. wire one full planning loop with mocked Cerebras outputs
-6. replace mocks with real perception, planning, rollout, and critic calls
-7. add verification and memory
-8. build the dashboard and baseline comparison
+2. add a prompt-box driven `UserObjective` entrypoint
+3. build a pluggable executor interface
+4. attempt the JARVIS execution backend first
+5. implement the Mineflayer fallback backend
+6. add screenshot capture and state extraction
+7. wire one full planning loop with mocked Cerebras outputs
+8. replace mocks with real perception, planning, rollout, and critic calls
+9. add verification and memory
+10. build the dashboard and baseline comparison
 
 ## One-Sentence Summary
 
-Mine0 is a Minecraft embodied agent architecture where Gemma on Cerebras imagines several structured futures in parallel, selects the best next action, executes it through a swappable controller, verifies what actually happened, and improves through memory-driven replanning.
+Mine0 is a Minecraft embodied agent architecture where a user gives a natural-language objective in a prompt box, Gemma on Cerebras imagines several structured futures in parallel, selects the best next action, executes it through JARVIS if possible or Mineflayer as backup, verifies what actually happened, and improves through memory-driven replanning.
