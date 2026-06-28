@@ -9,7 +9,7 @@ This scaffold is ready for the architecture split described in [PROJECT_PLAN.md]
 - The prompt-box entrypoint lives in [src/server.ts](/Users/rhb/Desktop/Mine0/src/server.ts).
 - Trace shape for the dashboard lives in [src/dashboard/dashboard_state.ts](/Users/rhb/Desktop/Mine0/src/dashboard/dashboard_state.ts).
 
-## Role 1: Dotoro
+## Role 1: Planner
 
 Recommended ownership:
 

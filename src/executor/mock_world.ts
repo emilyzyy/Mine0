@@ -1,5 +1,6 @@
-import { writeFile } from "node:fs/promises";
+import { readdir, writeFile } from "node:fs/promises";
 import type { CandidateAction, InventoryStack, Position3 } from "../contracts/index.ts";
+import { loadPlannerConfig } from "../shared/config.ts";
 import { isoNow } from "../shared/logger.ts";
 import { projectPath } from "../shared/fs.ts";
 
@@ -19,6 +20,7 @@ export interface MockWorldSnapshot {
 }
 
 export class MockMinecraftWorld {
+  private readonly config = loadPlannerConfig();
   private readonly seedLabel: string;
   private position: Position3;
   private inventory: InventoryStack[];
@@ -60,6 +62,12 @@ export class MockMinecraftWorld {
 
   async captureFrame(): Promise<string> {
     this.frameIndex += 1;
+
+    const sampleFrame = await this.resolveSampleFrame();
+    if (sampleFrame) {
+      return sampleFrame;
+    }
+
     const fileName = `step_${String(this.frameIndex).padStart(3, "0")}.png`;
     const absolutePath = projectPath("artifacts", "frames", fileName);
     await writeFile(absolutePath, Buffer.from(EMPTY_PNG_BASE64, "base64"));
@@ -206,6 +214,26 @@ export class MockMinecraftWorld {
 
   private countItem(item: string): number {
     return this.inventory.find((stack) => stack.item === item)?.count ?? 0;
+  }
+
+  private async resolveSampleFrame(): Promise<string | null> {
+    const screenshotDirectory = projectPath(this.config.screenshotDirectory);
+
+    try {
+      const files = (await readdir(screenshotDirectory))
+        .filter((fileName) => /\.(png|jpe?g|webp)$/i.test(fileName))
+        .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+
+      if (files.length === 0) {
+        return null;
+      }
+
+      const index = Math.min(this.frameIndex - 1, files.length - 1);
+      const selected = files[index];
+      return selected ? projectPath(this.config.screenshotDirectory, selected) : null;
+    } catch {
+      return null;
+    }
   }
 
   private estimateGoalProgress(userObjective: string): number {

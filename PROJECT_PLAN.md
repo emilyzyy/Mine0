@@ -141,7 +141,7 @@ Keep the abstraction boundary clean so both backends can share the same planner 
 
 The architecture is intentionally split into two roles with a small shared interface.
 
-### Role 1: Dotoro
+### Role 1: Planner
 
 Input:
 

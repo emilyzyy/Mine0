@@ -5,7 +5,7 @@ import type {
   SubgoalIntent,
   WorldState,
 } from "../contracts/index.ts";
-import type { ScoredFuture } from "../critic/critic_service.ts";
+import type { ProviderCallMeta } from "../planner/cerebras_client.ts";
 import type { VerificationResult } from "../verifier/verification_service.ts";
 
 export interface DecisionTrace {
@@ -24,9 +24,14 @@ export interface DecisionTrace {
     confidenceNotes: string[];
   };
   memorySummary: string[];
-  scoredFutures: ScoredFuture[];
+  plannedFuture: PredictedFuture;
   selectedIntent: SubgoalIntent;
   actionOutcome: ActionOutcome;
   verification: VerificationResult;
   storedMemory: MemoryEntry;
+  planner: {
+    providerMode: "mock" | "cerebras";
+    configuredModel: string;
+    callLog: ProviderCallMeta[];
+  };
 }

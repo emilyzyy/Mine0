@@ -12,6 +12,8 @@ test("Mine0App runs a complete mocked cycle", async () => {
 
   assert.equal(trace.objective, "Gather wood and make a crafting table");
   assert.ok(trace.selectedIntent.instruction.length > 0);
-  assert.ok(trace.scoredFutures.length >= 1);
+  assert.ok(trace.plannedFuture.strategy.length > 0);
   assert.ok(["success", "partial_success", "failed", "timeout"].includes(trace.actionOutcome.status));
+  assert.ok(trace.planner.callLog.length >= 1);
+  assert.ok(trace.planner.callLog.length <= 2);
 });

@@ -10,10 +10,9 @@
     <main class="shell">
       <section class="hero">
         <p class="eyebrow">Mine0 / Phase 0</p>
-        <h1>Prompt the planner. Watch the futures compete.</h1>
+        <h1>Prompt the planner. Watch one plan execute.</h1>
         <p class="lede">
-          This scaffold runs a mocked Cerebras-style planning loop with shared contracts,
-          swappable executors, and replay-ready traces before the project splits into role-specific work.
+          This scaffold runs a simplified planning loop with one perception pass, one plan, and a bounded executor handoff.
         </p>
       </section>
 
@@ -30,14 +29,6 @@
               <select id="executorKind" name="executorKind">
                 <option value="jarvis">JARVIS-VLA (mock primary)</option>
                 <option value="mineflayer">Mineflayer (mock fallback)</option>
-              </select>
-            </label>
-
-            <label class="field compact">
-              <span>Planning Mode</span>
-              <select id="mode" name="mode">
-                <option value="multiverse">Multiverse</option>
-                <option value="greedy">Greedy baseline</option>
               </select>
             </label>
 
@@ -59,7 +50,7 @@
 
         <article class="panel">
           <div class="panel-header">
-            <h2>Branch Scores</h2>
+            <h2>Planned Outcome</h2>
             <span id="mode-chip" class="chip"></span>
           </div>
           <div id="branch-table"></div>

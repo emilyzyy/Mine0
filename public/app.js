@@ -21,37 +21,31 @@ function renderIntent(trace) {
     <p><strong>Action:</strong> ${trace.selectedIntent.candidateAction.name}</p>
     <p><strong>Reason:</strong> ${trace.selectedIntent.candidateAction.reason}</p>
     <p><strong>Success condition:</strong> ${trace.selectedIntent.successCondition.item} x ${trace.selectedIntent.successCondition.count}</p>
+    <p><strong>Provider:</strong> ${trace.planner.providerMode} / ${trace.planner.configuredModel}</p>
   `;
 }
 
 function renderBranches(trace) {
-  const winnerId = trace.scoredFutures[0]?.future.branchId;
   branchTable.innerHTML = `
     <div class="branch-list">
-      ${trace.scoredFutures
-        .map(
-          (entry) => `
-            <article class="branch-row ${entry.future.branchId === winnerId ? "selected" : ""}">
-              <strong>${entry.future.strategy}</strong>
-              <div>${entry.future.candidateAction.name} :: ${JSON.stringify(entry.future.candidateAction.arguments)}</div>
-              <div class="branch-meta">
-                <span>score ${entry.score}</span>
-                <span>success ${entry.future.successProbability}</span>
-                <span>risk ${entry.future.risk}</span>
-                <span>eta ${entry.future.estimatedSeconds}s</span>
-              </div>
-              <div>${entry.future.likelyNextObservation}</div>
-            </article>
-          `,
-        )
-        .join("")}
+      <article class="branch-row selected">
+        <strong>${trace.plannedFuture.strategy}</strong>
+        <div>${trace.plannedFuture.candidateAction.name} :: ${JSON.stringify(trace.plannedFuture.candidateAction.arguments)}</div>
+        <div class="branch-meta">
+          <span>success ${trace.plannedFuture.successProbability}</span>
+          <span>risk ${trace.plannedFuture.risk}</span>
+          <span>eta ${trace.plannedFuture.estimatedSeconds}s</span>
+          <span>progress ${trace.plannedFuture.goalProgress}</span>
+        </div>
+        <div>${trace.plannedFuture.likelyNextObservation}</div>
+      </article>
     </div>
   `;
 }
 
 function renderTrace(trace) {
   selectedExecutor.textContent = trace.executor;
-  modeChip.textContent = trace.mode;
+  modeChip.textContent = "single-plan";
   renderIntent(trace);
   renderBranches(trace);
   worldState.textContent = JSON.stringify(
@@ -59,6 +53,7 @@ function renderTrace(trace) {
       worldState: trace.worldState,
       perception: trace.perception,
       memorySummary: trace.memorySummary,
+      planner: trace.planner,
     },
     null,
     2,
@@ -78,12 +73,12 @@ function renderTrace(trace) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   runButton.disabled = true;
-  setStatus("Running mocked decision loop...", "running");
+  setStatus("Running planning loop...", "running");
 
   const payload = {
     objective: document.getElementById("objective").value,
     executorKind: document.getElementById("executorKind").value,
-    mode: document.getElementById("mode").value,
+    mode: "multiverse",
   };
 
   try {

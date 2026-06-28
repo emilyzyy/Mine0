@@ -1,4 +1,16 @@
 import type { CandidateAction, WorldState } from "../contracts/index.ts";
+import type { PredictedFuture } from "../contracts/index.ts";
+import type { PerceptionResult } from "../perception/perception_service.ts";
+import { makeId } from "../shared/ids.ts";
+import {
+  CerebrasClient,
+  type ProviderCallMeta,
+} from "./cerebras_client.ts";
+import {
+  plannerSystemPrompt,
+  plannerUserPrompt,
+} from "./planner_prompts.ts";
+import { plannerProposalSchema } from "./planner_schemas.ts";
 
 export interface PlannerProposal {
   plannerId: string;
@@ -9,6 +21,22 @@ export interface PlannerProposal {
     item: string;
     count: number;
   };
+  maximumSteps: number;
+}
+
+interface PlannerProposalResponse {
+  plannerId: string;
+  strategy: string;
+  instruction: string;
+  actionName: string;
+  blockType: string;
+  item: string;
+  count: number;
+  direction: string;
+  location: string;
+  reason: string;
+  successItem: string;
+  successCount: number;
   maximumSteps: number;
 }
 
@@ -32,7 +60,60 @@ function dedupeByAction(proposals: PlannerProposal[]): PlannerProposal[] {
 }
 
 export class PlannerService {
-  plan(worldState: WorldState, memorySummary: string[]): PlannerProposal[] {
+  private readonly client = new CerebrasClient();
+
+  async plan(
+    worldState: WorldState,
+    memorySummary: string[],
+    perception: PerceptionResult,
+  ): Promise<{ proposal: PlannerProposal; meta: ProviderCallMeta[] }> {
+    if (this.client.config.provider === "mock") {
+      return {
+        proposal: this.heuristicPlan(worldState, memorySummary)[0],
+        meta: [
+          {
+            label: "planner",
+            provider: "mock",
+            model: "mock",
+            status: "skipped",
+            latencyMs: 0,
+            usage: null,
+            timeInfo: null,
+            warning: "Using heuristic planner because CEREBRAS_API_KEY is not configured.",
+          },
+        ],
+      };
+    }
+    const result = await this.client.requestStructured<PlannerProposalResponse>({
+      label: "planner",
+      schemaName: "mine0_planner",
+      schema: plannerProposalSchema,
+      messages: [
+        {
+          role: "system",
+          content: plannerSystemPrompt(
+            "choose one best bounded next action with no alternative branches",
+          ),
+        },
+        {
+          role: "user",
+          content: plannerUserPrompt(worldState, perception, memorySummary),
+        },
+      ],
+      maxOutputTokens: 900,
+      temperature: 0.15,
+    });
+
+    const heuristic = this.heuristicPlan(worldState, memorySummary);
+    const proposal = result.data ? this.fromStructured(result.data) : heuristic[0];
+
+    return {
+      proposal,
+      meta: [result.meta],
+    };
+  }
+
+  private heuristicPlan(worldState: WorldState, memorySummary: string[]): PlannerProposal[] {
     const objective = worldState.userObjective.toLowerCase();
     const logs = countItem(worldState, "oak_log");
     const planks = countItem(worldState, "oak_planks");
@@ -105,4 +186,88 @@ export class PlannerService {
 
     return deduped;
   }
+
+  private fromStructured(value: PlannerProposalResponse): PlannerProposal {
+    return {
+      plannerId: value.plannerId || makeId("planner"),
+      strategy: value.strategy,
+      instruction: value.instruction,
+      candidateAction: {
+        name: value.actionName,
+        arguments: compactArguments({
+          block_type: value.blockType,
+          item: value.item,
+          count: value.count,
+          direction: value.direction,
+          location: value.location,
+        }),
+        reason: value.reason,
+      },
+      successCondition: {
+        item: value.successItem,
+        count: value.successCount,
+      },
+      maximumSteps: Math.max(40, Math.round(value.maximumSteps)),
+    };
+  }
+}
+
+function compactArguments(input: Record<string, string | number>): Record<string, string | number> {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => {
+      if (typeof value === "number") {
+        return value > 0;
+      }
+
+      return value !== "" && value !== "none";
+    }),
+  );
+}
+
+export function proposalToPredictedFuture(
+  proposal: PlannerProposal,
+  worldState: WorldState,
+): PredictedFuture {
+  const actionName = proposal.candidateAction.name;
+  const successProbability =
+    actionName === "craft" ? 0.9 : actionName === "scan" ? 0.82 : actionName === "explore" ? 0.76 : 0.88;
+  const estimatedSeconds =
+    actionName === "craft" ? 11 : actionName === "scan" ? 4 : actionName === "explore" ? 14 : 18;
+  const risk =
+    actionName === "scan" ? 0.04 : actionName === "explore" ? 0.09 : worldState.visibleHazards.length > 0 ? 0.12 : 0.06;
+  const goalProgress =
+    actionName === "craft" ? 0.6 : actionName === "collect" ? 0.22 : actionName === "scan" ? 0.08 : 0.12;
+
+  return {
+    branchId: makeId("plan"),
+    strategy: proposal.strategy,
+    candidateAction: proposal.candidateAction,
+    preconditions:
+      actionName === "craft"
+        ? ["required resources available", "inventory has space"]
+        : ["target is reachable", "step budget remains bounded"],
+    predictedSteps: [
+      {
+        action: proposal.instruction,
+        expectedResult: `Progress toward ${proposal.successCondition.item}.`,
+      },
+      {
+        action: "verify outcome",
+        expectedResult: "Inventory and scene should reflect the expected change.",
+      },
+    ],
+    successProbability,
+    estimatedSeconds,
+    risk,
+    resourceCost: actionName === "craft" ? 1 : 0,
+    goalProgress,
+    likelyNextObservation:
+      actionName === "collect"
+        ? "Inventory should gain the requested resource count or part of it."
+        : actionName === "craft"
+          ? "Crafted item should appear in inventory."
+          : actionName === "scan"
+            ? "Scene understanding should become more certain."
+            : "Positioning should improve for the next action.",
+  };
 }

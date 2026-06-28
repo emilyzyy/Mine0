@@ -4,13 +4,12 @@ import {
   parseSubgoalIntent,
   parseWorldState,
 } from "../contracts/index.ts";
-import { CriticService } from "../critic/critic_service.ts";
 import type { DecisionTrace } from "../dashboard/dashboard_state.ts";
 import { createExecutor, type ExecutorKind } from "../executor/index.ts";
 import { MemoryService } from "../memory/memory_service.ts";
 import { PerceptionService } from "../perception/perception_service.ts";
-import { PlannerService } from "../planner/planner_service.ts";
-import { RolloutService } from "../planner/rollout_service.ts";
+import { loadPlannerConfig } from "../shared/config.ts";
+import { PlannerService, proposalToPredictedFuture } from "../planner/planner_service.ts";
 import { makeId } from "../shared/ids.ts";
 import { appendJsonLine, isoNow } from "../shared/logger.ts";
 import { VerificationService } from "../verifier/verification_service.ts";
@@ -26,39 +25,33 @@ export interface RunCycleInput {
 export class Mine0App {
   private readonly memory = new MemoryService();
   private readonly planner = new PlannerService();
-  private readonly rollout = new RolloutService();
-  private readonly critic = new CriticService();
   private readonly perception = new PerceptionService();
   private readonly verifier = new VerificationService();
+  private readonly config = loadPlannerConfig();
 
   async runCycle(input: RunCycleInput): Promise<DecisionTrace> {
     const executor = createExecutor(input.executorKind);
     await executor.reset(input.objective);
 
     const observation = await executor.observe(input.objective);
-    const perceived = this.perception.perceive(observation.worldState);
+    const perceptionStep = await this.perception.perceive(observation.worldState);
     const worldState = parseWorldState({
       ...observation.worldState,
-      sceneSummary: perceived.sceneSummary,
+      sceneSummary: perceptionStep.result.sceneSummary,
     });
     const memoryResult = this.memory.retrieve(worldState);
-    const plannerProposals = this.planner.plan(worldState, memoryResult.summary);
-    const rolloutCandidates = this.rollout.rollout(worldState, plannerProposals);
-    const selectedFutures =
-      input.mode === "greedy" ? rolloutCandidates.slice(0, 1) : rolloutCandidates;
-    const memoryAdjustment = memoryResult.entries.length > 0 ? -0.01 : 0;
-    const scored = this.critic.score(selectedFutures, memoryAdjustment);
-    const winner = scored[0];
-    if (!winner) {
-      throw new Error("No viable futures were produced by the planner.");
-    }
-
-    const selectedIntent = parseSubgoalIntent(this.toIntent(input.objective, winner.future));
+    const planningStep = await this.planner.plan(
+      worldState,
+      memoryResult.summary,
+      perceptionStep.result,
+    );
+    const plannedFuture = proposalToPredictedFuture(planningStep.proposal, worldState);
+    const selectedIntent = parseSubgoalIntent(this.toIntent(input.objective, plannedFuture));
     const actionOutcome = await executor.execute(selectedIntent, worldState);
-    const verification = this.verifier.verify(winner.future, actionOutcome);
+    const verification = this.verifier.verify(plannedFuture, actionOutcome);
     const storedMemory = await this.memory.remember(
       worldState,
-      winner.future,
+      plannedFuture,
       actionOutcome,
       verification.predictionError,
     );
@@ -70,13 +63,21 @@ export class Mine0App {
       mode: input.mode,
       startedAt: isoNow(),
       worldState,
-      perception: perceived,
+      perception: perceptionStep.result,
       memorySummary: memoryResult.summary,
-      scoredFutures: scored,
+      plannedFuture,
       selectedIntent,
       actionOutcome,
       verification,
       storedMemory,
+      planner: {
+        providerMode: this.config.provider,
+        configuredModel: this.config.model,
+        callLog: [
+          perceptionStep.meta,
+          ...planningStep.meta,
+        ],
+      },
     };
 
     await appendJsonLine("runs.jsonl", trace);
@@ -86,7 +87,7 @@ export class Mine0App {
   private toIntent(objective: string, future: PredictedFuture): SubgoalIntent {
     return {
       objective,
-      instruction: future.predictedSteps[0]?.action ?? future.strategy,
+      instruction: describeInstruction(future),
       candidateAction: future.candidateAction,
       successCondition: {
         item: String(future.candidateAction.arguments.block_type ?? future.candidateAction.arguments.item ?? "oak_log"),
@@ -94,5 +95,25 @@ export class Mine0App {
       },
       maximumSteps: future.candidateAction.name === "collect" ? 400 : 180,
     };
+  }
+}
+
+function describeInstruction(future: PredictedFuture): string {
+  const action = future.candidateAction;
+  switch (action.name) {
+    case "collect":
+      return `Collect ${action.arguments.count ?? 1} ${action.arguments.block_type ?? "resource"}`;
+    case "craft":
+      return `Craft ${action.arguments.count ?? 1} ${action.arguments.item ?? "item"}`;
+    case "equip":
+      return `Equip ${action.arguments.item ?? "item"}`;
+    case "scan":
+      return `Scan ${action.arguments.direction ?? "forward"} for resources and hazards`;
+    case "explore":
+      return `Explore ${action.arguments.direction ?? "forward"} to improve position`;
+    case "place":
+      return `Place ${action.arguments.block_type ?? "block"} at ${action.arguments.location ?? "target location"}`;
+    default:
+      return future.predictedSteps[0]?.action ?? future.strategy;
   }
 }
