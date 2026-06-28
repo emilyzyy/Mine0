@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mine0 Control Room</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Mine0 / Phase 0</p>
+        <h1>Prompt the planner. Watch the futures compete.</h1>
+        <p class="lede">
+          This scaffold runs a mocked Cerebras-style planning loop with shared contracts,
+          swappable executors, and replay-ready traces before the project splits into role-specific work.
+        </p>
+      </section>
+
+      <section class="panel">
+        <form id="planner-form" class="planner-form">
+          <label class="field">
+            <span>Objective</span>
+            <textarea id="objective" name="objective" rows="3">Gather wood, craft a crafting table, and obtain a wooden pickaxe.</textarea>
+          </label>
+
+          <div class="controls">
+            <label class="field compact">
+              <span>Executor</span>
+              <select id="executorKind" name="executorKind">
+                <option value="jarvis">JARVIS-VLA (mock primary)</option>
+                <option value="mineflayer">Mineflayer (mock fallback)</option>
+              </select>
+            </label>
+
+            <label class="field compact">
+              <span>Planning Mode</span>
+              <select id="mode" name="mode">
+                <option value="multiverse">Multiverse</option>
+                <option value="greedy">Greedy baseline</option>
+              </select>
+            </label>
+
+            <button id="run-button" type="submit">Run Decision Cycle</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="status" class="status idle">Ready.</section>
+
+      <section id="results" class="results hidden">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Selected Instruction</h2>
+            <span id="selected-executor" class="chip"></span>
+          </div>
+          <div id="selected-intent" class="intent-card"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Branch Scores</h2>
+            <span id="mode-chip" class="chip"></span>
+          </div>
+          <div id="branch-table"></div>
+        </article>
+
+        <article class="panel split">
+          <div>
+            <h2>World Snapshot</h2>
+            <pre id="world-state"></pre>
+          </div>
+          <div>
+            <h2>Outcome + Verification</h2>
+            <pre id="outcome"></pre>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

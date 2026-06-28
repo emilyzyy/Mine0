@@ -1,0 +1,16 @@
+{
+  "name": "mine0",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mine0 Phase 0 scaffold: typed contracts, mocked planning loop, and prompt-box entrypoint.",
+  "scripts": {
+    "check": "node --experimental-strip-types --test tests/*.test.ts",
+    "start": "node --experimental-strip-types src/server.ts",
+    "demo": "node --experimental-strip-types src/cli.ts",
+    "eval": "node --experimental-strip-types src/evaluation/run_baseline.ts"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

@@ -1,0 +1,5 @@
+artifacts/logs/*.json
+artifacts/logs/*.jsonl
+artifacts/replays/*.json
+artifacts/frames/*.png
+.DS_Store
