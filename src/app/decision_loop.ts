@@ -41,7 +41,7 @@ export class Mine0App {
       ...observation.worldState,
       sceneSummary: perceived.sceneSummary,
     });
-    const memoryResult = this.memory.retrieve(worldState);
+    const memoryResult = await this.memory.retrieve(worldState);
     const plannerProposals = this.planner.plan(worldState, memoryResult.summary);
     const rolloutCandidates = this.rollout.rollout(worldState, plannerProposals);
     const selectedFutures =
