@@ -1,6 +1,9 @@
-import type { MemoryEntry, PredictedFuture, WorldState, ActionOutcome } from "../contracts/index.ts";
+import { readFile } from "node:fs/promises";
+import type { ActionOutcome, MemoryEntry, PredictedFuture, WorldState } from "../contracts/index.ts";
+import { parseMemoryEntry } from "../contracts/index.ts";
 import { makeId } from "../shared/ids.ts";
 import { appendJsonLine, isoNow } from "../shared/logger.ts";
+import { ensureProjectDirectories, projectPath } from "../shared/fs.ts";
 
 export interface MemoryQueryResult {
   entries: MemoryEntry[];
@@ -9,6 +12,50 @@ export interface MemoryQueryResult {
 
 export class MemoryService {
   private readonly entries: MemoryEntry[] = [];
+  private readonly seenIds = new Set<string>();
+  private readonly logFile: string;
+
+  // Resolves once the on-disk log has been loaded.  retrieve() and remember()
+  // both await this internally, so callers never need to await it themselves.
+  readonly ready: Promise<void>;
+
+  constructor(logFile: string = "memory.jsonl") {
+    this.logFile = logFile;
+    this.ready = this.loadFromDisk();
+  }
+
+  private async loadFromDisk(): Promise<void> {
+    await ensureProjectDirectories();
+    let raw: string;
+    try {
+      raw = await readFile(projectPath("artifacts", "logs", this.logFile), "utf8");
+    } catch {
+      return;
+    }
+
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        continue;
+      }
+
+      let entry: MemoryEntry;
+      try {
+        entry = parseMemoryEntry(parsed);
+      } catch {
+        continue;
+      }
+
+      if (this.seenIds.has(entry.id)) continue;
+      this.seenIds.add(entry.id);
+      this.entries.push(entry);
+    }
+  }
 
   async remember(
     worldState: WorldState,
@@ -16,6 +63,7 @@ export class MemoryService {
     actualOutcome: ActionOutcome,
     predictionError: number,
   ): Promise<MemoryEntry> {
+    await this.ready;
     const entry: MemoryEntry = {
       id: makeId("memory"),
       objective: worldState.userObjective,
@@ -29,12 +77,14 @@ export class MemoryService {
       actualOutcome,
       createdAt: isoNow(),
     };
+    this.seenIds.add(entry.id);
     this.entries.push(entry);
-    await appendJsonLine("memory.jsonl", entry);
+    await appendJsonLine(this.logFile, entry);
     return entry;
   }
 
-  retrieve(worldState: WorldState): MemoryQueryResult {
+  async retrieve(worldState: WorldState): Promise<MemoryQueryResult> {
+    await this.ready;
     const objectiveTerms = worldState.userObjective.toLowerCase().split(/\s+/).filter(Boolean);
     const entries = this.entries
       .filter((entry) => {

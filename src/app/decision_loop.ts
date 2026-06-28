@@ -39,7 +39,7 @@ export class Mine0App {
       ...observation.worldState,
       sceneSummary: perceptionStep.result.sceneSummary,
     });
-    const memoryResult = this.memory.retrieve(worldState);
+    const memoryResult = await this.memory.retrieve(worldState);
     const planningStep = await this.planner.plan(
       worldState,
       memoryResult.summary,
