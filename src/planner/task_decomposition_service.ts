@@ -68,7 +68,11 @@ function normalizeTargetCount(value: unknown): number {
   return 1;
 }
 
-export function normalizeLlmSubtasks(rawSubtasks: RawSubtask[], objective: string): Subtask[] {
+export function normalizeLlmSubtasks(
+  rawSubtasks: RawSubtask[],
+  objective: string,
+  parentId = "goal",
+): Subtask[] {
   const seen = new Set<string>();
   const normalized: Subtask[] = [];
 
@@ -89,7 +93,7 @@ export function normalizeLlmSubtasks(rawSubtasks: RawSubtask[], objective: strin
       description: raw.description.trim() || raw.planningFocus.trim() || objective,
       planningFocus: raw.planningFocus.trim() || raw.description.trim() || objective,
       compound: false,
-      parentId: "goal",
+      parentId,
       expectedAction,
       targetItem: optionalField(raw.targetItem),
       targetCount: normalizeTargetCount(raw.targetCount),
@@ -169,7 +173,7 @@ export class TaskDecompositionService {
       return { subtasks: null, meta: result.meta };
     }
 
-    const normalized = normalizeLlmSubtasks(result.data.subtasks, objective);
+    const normalized = normalizeLlmSubtasks(result.data.subtasks, objective, "goal");
     if (normalized.length === 0) {
       return { subtasks: null, meta: result.meta };
     }
@@ -188,6 +192,7 @@ export class TaskDecompositionService {
     worldState: WorldState,
     intent: SubgoalIntent,
     executorKind: ExecutorKind = "mineflayer",
+    recentHistorySummary: string[] = [],
   ): Promise<{ subtasks: Subtask[]; meta: ProviderCallMeta }> {
     if (!this.client.config.apiKey) {
       return {
@@ -221,6 +226,7 @@ export class TaskDecompositionService {
             failureReason,
             failedAction,
             executorKind,
+            recentHistorySummary,
           ),
         },
       ],
@@ -234,9 +240,95 @@ export class TaskDecompositionService {
 
     const pendingIds = new Set(taskContext.pendingSubtasks.map((entry) => entry.id));
     const completedIds = new Set(taskContext.completedSubtasks.map((entry) => entry.id));
-    const normalized = normalizeLlmSubtasks(result.data.prerequisiteSubtasks, objective).filter(
+    const normalized = normalizeLlmSubtasks(
+      result.data.prerequisiteSubtasks,
+      objective,
+      taskContext.activeSubtask?.id ?? "goal",
+    ).filter(
       (subtask) => !pendingIds.has(subtask.id) && !completedIds.has(subtask.id),
     );
+
+    return {
+      subtasks: filterSatisfiedSubtasks(normalized, worldState),
+      meta: result.meta,
+    };
+  }
+
+  async decomposeActiveSubtask(
+    objective: string,
+    taskContext: TaskPlanningContext,
+    worldState: WorldState,
+    memorySummary: string[] = [],
+    recentHistorySummary: string[] = [],
+    executorKind: ExecutorKind = "mineflayer",
+  ): Promise<{ subtasks: Subtask[]; meta: ProviderCallMeta }> {
+    const active = taskContext.activeSubtask;
+    if (!active) {
+      return {
+        subtasks: [],
+        meta: {
+          label: "task_subtask_decomposition",
+          provider: "mock",
+          model: "mock",
+          status: "skipped",
+          latencyMs: 0,
+          usage: null,
+          timeInfo: null,
+          warning: "No active subtask was available to decompose.",
+        },
+      };
+    }
+
+    if (!this.client.config.apiKey) {
+      return {
+        subtasks: [],
+        meta: {
+          label: "task_subtask_decomposition",
+          provider: "mock",
+          model: "mock",
+          status: "skipped",
+          latencyMs: 0,
+          usage: null,
+          timeInfo: null,
+          warning: "Skipped recursive subtask decomposition because CEREBRAS_API_KEY is not configured.",
+        },
+      };
+    }
+
+    const result = await this.client.requestStructured<DecompositionResponse>({
+      label: "task_subtask_decomposition",
+      schemaName: "task_decomposition",
+      schema: taskDecompositionSchema,
+      messages: [
+        { role: "system", content: taskDecompositionSystemPrompt(executorKind) },
+        {
+          role: "user",
+          content: taskDecompositionUserPrompt(
+            objective,
+            worldState,
+            memorySummary,
+            executorKind,
+            taskContext,
+            recentHistorySummary,
+            true,
+          ),
+        },
+      ],
+      maxOutputTokens: 2048,
+      temperature: 0.2,
+    });
+
+    if (!result.data?.subtasks?.length) {
+      return { subtasks: [], meta: result.meta };
+    }
+
+    const pendingIds = new Set(taskContext.pendingSubtasks.map((entry) => entry.id));
+    const completedIds = new Set(taskContext.completedSubtasks.map((entry) => entry.id));
+    const normalized = normalizeLlmSubtasks(
+      result.data.subtasks,
+      objective,
+      active.id,
+    ).filter((subtask) => !pendingIds.has(subtask.id) && !completedIds.has(subtask.id));
 
     return {
       subtasks: filterSatisfiedSubtasks(normalized, worldState),

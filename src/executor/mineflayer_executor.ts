@@ -31,19 +31,52 @@ export class MineflayerExecutor implements ExecutorBackend {
   private screenshotCaptureUnavailableReason: string | null = null;
   private readonly liveMode = this.config.mineflayer.enabled && Boolean(this.config.mineflayer.host);
 
+  async beginObjective(userObjective: string): Promise<void> {
+    if (this.liveMode) {
+      const bot = await this.ensureBot();
+      this.activeBackend = "live";
+      this.screenshotSequence = 0;
+      bot.clearControlStates();
+      return;
+    }
+
+    this.activeBackend = "mock";
+    this.world.reset();
+  }
+
+  async announceObjectiveResult(result: {
+    objective: string;
+    completed: boolean;
+    stopReason: string;
+    failureReason: string | null;
+  }): Promise<void> {
+    if (!this.liveMode) {
+      return;
+    }
+
+    try {
+      const bot = await this.ensureBot();
+      const message = result.completed
+        ? `Completed: ${result.objective}`
+        : `Failed (${sanitizeChatReason(result.failureReason ?? result.stopReason)}): ${result.objective}`;
+      bot.chat(message.slice(0, 240));
+    } catch {
+      // Best-effort chat notification only.
+    }
+  }
+
   async observe(userObjective: string): Promise<ExecutorObservation> {
     if (this.liveMode) {
       const bot = await this.ensureBot();
       this.activeBackend = "live";
       return {
-        worldState: parseWorldState(this.snapshotLiveWorld(bot, userObjective)),
+        worldState: parseWorldState(this.snapshotLiveWorld(bot, userObjective, null)),
       };
     }
 
     this.activeBackend = "mock";
-    const screenshotPath = await this.world.captureFrame();
     return {
-      worldState: parseWorldState(this.world.snapshot(userObjective, null)),
+      worldState: parseWorldState(this.world.snapshot(userObjective, null, null)),
     };
   }
 
@@ -191,9 +224,9 @@ export class MineflayerExecutor implements ExecutorBackend {
     return bot;
   }
 
-  private async captureLiveScreenshot(bot: MineflayerBot): Promise<string> {
+  private async captureLiveScreenshot(bot: MineflayerBot): Promise<string | null> {
     if (!this.config.mineflayer.headlessCaptureEnabled || this.screenshotCaptureUnavailableReason) {
-      return "";
+      return null;
     }
 
     try {
@@ -210,7 +243,7 @@ export class MineflayerExecutor implements ExecutorBackend {
     } catch (error) {
       this.screenshotCaptureUnavailableReason =
         error instanceof Error ? error.message : "Mineflayer viewer screenshot capture failed.";
-      return "";
+      return null;
     }
   }
 
@@ -281,7 +314,7 @@ export class MineflayerExecutor implements ExecutorBackend {
     }) ?? null;
   }
 
-  private snapshotLiveWorld(bot: MineflayerBot, userObjective: string): WorldState {
+  private snapshotLiveWorld(bot: MineflayerBot, userObjective: string, screenshotPath: string | null): WorldState {
     const inventory = this.readInventory(bot);
     const perceivedResources = this.scanResources(bot);
     const nearbyBlocks = this.scanNearbyBlocks(bot);
@@ -315,6 +348,7 @@ export class MineflayerExecutor implements ExecutorBackend {
       lineOfSightTarget,
       interactionHints,
       goalProgress: this.estimateGoalProgress(userObjective, inventory),
+      screenshotPath,
     };
   }
 
@@ -571,14 +605,64 @@ export class MineflayerExecutor implements ExecutorBackend {
     const recipes = bot.recipesFor(item.id, null, count, heldTableBlock ?? null);
     const recipe = recipes[0];
     if (!recipe) {
-      throw new Error(
-        needsWorkstation
-          ? `No available recipe for ${itemName}. Place a crafting table nearby first.`
-          : `No available recipe for ${itemName}.`,
-      );
+      throw new Error(this.describeMissingCraftPrerequisites(bot, item.id, itemName, count, heldTableBlock ?? null));
     }
 
     await this.withTimeout(bot.craft(recipe, count, heldTableBlock ?? null), this.config.mineflayer.actionTimeoutMs, "Crafting timed out.");
+  }
+
+  private describeMissingCraftPrerequisites(
+    bot: MineflayerBot,
+    itemId: number,
+    itemName: string,
+    count: number,
+    craftingTable: unknown,
+  ): string {
+    const recipes = bot.recipesAll?.(itemId, null, craftingTable) ?? [];
+    if (recipes.length === 0) {
+      return `No craft recipe exists for ${itemName}.`;
+    }
+
+    const inventoryCount = (ingredientId: number, metadata: number | null): number =>
+      bot.inventory.count(ingredientId, metadata ?? null);
+    const registryItemsById = Object.values(bot.registry.itemsByName).reduce<Record<number, string>>((map, entry) => {
+      map[entry.id] = map[entry.id] ?? "";
+      return map;
+    }, {});
+    for (const [name, entry] of Object.entries(bot.registry.itemsByName)) {
+      registryItemsById[entry.id] = name;
+    }
+
+    const bestMissing = recipes
+      .map((recipe) => {
+        const recipeResultCount = Math.max(1, Number(recipe.result?.count ?? 1));
+        const craftCount = Math.max(1, Math.ceil(count / recipeResultCount));
+        const missing = recipe.delta
+          .filter((delta) => delta.count < 0)
+          .map((delta) => {
+            const required = Math.abs(delta.count) * craftCount;
+            const available = inventoryCount(delta.id, delta.metadata ?? null);
+            return {
+              item: registryItemsById[delta.id] ?? `item_${delta.id}`,
+              count: Math.max(0, required - available),
+            };
+          })
+          .filter((entry) => entry.count > 0);
+        return {
+          missing,
+          missingTotal: missing.reduce((sum, entry) => sum + entry.count, 0),
+        };
+      })
+      .sort((left, right) => left.missingTotal - right.missingTotal)[0];
+
+    if (!bestMissing || bestMissing.missing.length === 0) {
+      return `No available recipe for ${itemName}.`;
+    }
+
+    const missingSummary = bestMissing.missing
+      .map((entry) => `${entry.item} x${entry.count}`)
+      .join(", ");
+    return `Craft prerequisites missing for ${itemName}. Missing ingredients: ${missingSummary}.`;
   }
 
   private findNearbyCraftingTableBlock(bot: MineflayerBot, maxDistance = 32) {
@@ -1146,6 +1230,27 @@ export class MineflayerExecutor implements ExecutorBackend {
       inventory
         .filter((stack) => aliases.includes(stack.item))
         .reduce((sum, stack) => sum + stack.count, 0);
+    const heldItemName = bot.heldItem?.name ?? "air";
+    const hasAny = (aliases: string[]) => count(aliases) > 0;
+    const heldMatches = (aliases: string[]) => aliases.includes(heldItemName);
+    const inventoryHasHarvestToolFor = (resource: "stone" | "iron_ore" | "diamond_ore") => {
+      if (resource === "stone") {
+        return hasAny(["wooden_pickaxe", "stone_pickaxe", "iron_pickaxe", "diamond_pickaxe"]);
+      }
+      if (resource === "iron_ore") {
+        return hasAny(["stone_pickaxe", "iron_pickaxe", "diamond_pickaxe"]);
+      }
+      return hasAny(["iron_pickaxe", "diamond_pickaxe"]);
+    };
+    const heldHarvests = (resource: "stone" | "iron_ore" | "diamond_ore") => {
+      if (resource === "stone") {
+        return heldMatches(["wooden_pickaxe", "stone_pickaxe", "iron_pickaxe", "diamond_pickaxe"]);
+      }
+      if (resource === "iron_ore") {
+        return heldMatches(["stone_pickaxe", "iron_pickaxe", "diamond_pickaxe"]);
+      }
+      return heldMatches(["iron_pickaxe", "diamond_pickaxe"]);
+    };
 
     if (count(["crafting_table"]) > 0) {
       hints.add("crafting_table_in_inventory");
@@ -1181,6 +1286,34 @@ export class MineflayerExecutor implements ExecutorBackend {
     }
     if (perceivedResources.includes("stone_outcrop") || nearbyBlocks.includes("stone")) {
       hints.add("stone_visible");
+      if (heldHarvests("stone")) {
+        hints.add("current_tool_can_harvest_stone");
+      } else {
+        hints.add("current_tool_unsuitable_for_stone");
+      }
+      if (inventoryHasHarvestToolFor("stone")) {
+        hints.add("inventory_has_tool_for_stone");
+      }
+    }
+    if (perceivedResources.includes("iron_ore") || nearbyBlocks.includes("iron_ore")) {
+      if (heldHarvests("iron_ore")) {
+        hints.add("current_tool_can_harvest_iron_ore");
+      } else {
+        hints.add("current_tool_unsuitable_for_iron_ore");
+      }
+      if (inventoryHasHarvestToolFor("iron_ore")) {
+        hints.add("inventory_has_tool_for_iron_ore");
+      }
+    }
+    if (perceivedResources.includes("diamond_ore") || nearbyBlocks.includes("diamond_ore")) {
+      if (heldHarvests("diamond_ore")) {
+        hints.add("current_tool_can_harvest_diamond_ore");
+      } else {
+        hints.add("current_tool_unsuitable_for_diamond_ore");
+      }
+      if (inventoryHasHarvestToolFor("diamond_ore")) {
+        hints.add("inventory_has_tool_for_diamond_ore");
+      }
     }
     if (perceivedResources.includes("oak_tree") || nearbyBlocks.includes("log") || nearbyBlocks.includes("log2")) {
       hints.add("tree_visible");
@@ -1216,6 +1349,14 @@ export class MineflayerExecutor implements ExecutorBackend {
     }
     if (/(pickaxe)/i.test(bot.heldItem?.name ?? "")) {
       hints.add("holding_pickaxe");
+    }
+    if (heldItemName !== "air") {
+      hints.add(`holding_${heldItemName}`);
+    }
+    for (const toolName of ["wooden_pickaxe", "stone_pickaxe", "iron_pickaxe", "diamond_pickaxe"]) {
+      if (hasAny([toolName])) {
+        hints.add(`inventory_has_${toolName}`);
+      }
     }
     hints.add("structured_perception_only");
     return [...hints];
@@ -1533,6 +1674,7 @@ interface MineflayerBot {
   };
   inventory: {
     items(): Array<{ name: string; count: number; type?: number }>;
+    count(itemId: number, metadata: number | null): number;
   };
   registry: {
     itemsByName: Record<string, { id: number }>;
@@ -1547,6 +1689,7 @@ interface MineflayerBot {
   loadPlugin(plugin: (bot: MineflayerBot) => void): void;
   setControlState(control: string, state: boolean): void;
   clearControlStates(): void;
+  chat(message: string): void;
   once(event: string, listener: (...args: unknown[]) => void): void;
   off(event: string, listener: (...args: unknown[]) => void): void;
   quit(reason?: string): void;
@@ -1556,6 +1699,14 @@ interface MineflayerBot {
   }): { name?: string; position: { x: number; y: number; z: number } } | null;
   dig(block: unknown, forceLook?: boolean): Promise<void>;
   recipesFor(itemId: number, metadata: number | null, count: number, craftingTable: unknown): unknown[];
+  recipesAll?(
+    itemId: number,
+    metadata: number | null,
+    craftingTable: unknown,
+  ): Array<{
+    result?: { count?: number };
+    delta: Array<{ id: number; metadata: number | null; count: number }>;
+  }>;
   craft(recipe: unknown, count: number, craftingTable: unknown): Promise<void>;
   openFurnace(block: unknown): Promise<OpenedFurnace>;
   equip(item: unknown, destination: string): Promise<void>;
@@ -1586,4 +1737,12 @@ interface OpenedFurnace {
   takeOutput(): Promise<void>;
   outputItem(): { count?: number } | null;
   close(): void;
+}
+
+function sanitizeChatReason(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[^\x20-\x7E]/g, "")
+    .trim()
+    .slice(0, 120) || "unknown reason";
 }

@@ -8,9 +8,14 @@ export class JarvisExecutor implements ExecutorBackend {
   readonly displayName = "JARVIS-VLA (mock)";
   private readonly world = new MockMinecraftWorld("jarvis");
 
+  async beginObjective(_userObjective: string): Promise<void> {
+    this.world.reset();
+  }
+
   async observe(userObjective: string): Promise<ExecutorObservation> {
+    const screenshotPath = await this.world.captureFrame();
     return {
-      worldState: parseWorldState(this.world.snapshot(userObjective, null)),
+      worldState: parseWorldState(this.world.snapshot(userObjective, null, screenshotPath)),
     };
   }
 

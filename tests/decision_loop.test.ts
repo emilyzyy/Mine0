@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Mine0App } from "../src/app/decision_loop.ts";
+import { createExecutor } from "../src/executor/index.ts";
 
 test("Mine0App runs a complete mocked cycle", async () => {
   const app = new Mine0App();
@@ -20,4 +21,11 @@ test("Mine0App runs a complete mocked cycle", async () => {
   assert.ok(trace.planner.callLog.length <= 2);
   assert.equal(trace.planner.scoredBranches.length, 1);
   assert.ok(typeof trace.stopReason === "string" && trace.stopReason.length > 0);
+});
+
+test("createExecutor reuses the Mineflayer executor instance across prompts", () => {
+  const first = createExecutor("mineflayer");
+  const second = createExecutor("mineflayer");
+
+  assert.equal(first, second);
 });

@@ -282,9 +282,11 @@ test("TaskStackService prependSubtasks inserts LLM refinement before active head
     context.pendingSubtasks.map((entry) => entry.id),
     ["locate_water", "place_boat"],
   );
+  const placeBoatNode = context.taskTree.children.find((entry) => entry.id === "place_boat");
+  assert.equal(placeBoatNode?.children.some((entry) => entry.id === "locate_water"), true);
 });
 
-test("TaskStackService expands missing prerequisites for LLM-planned place subtasks", () => {
+test("TaskStackService leaves LLM-planned place subtasks intact until refinement adds prerequisites", () => {
   const stack = new TaskStackService();
   stack.reset(
     "mine for diamonds",
@@ -332,7 +334,7 @@ test("TaskStackService expands missing prerequisites for LLM-planned place subta
 
   const context = stack.getContext();
   assert.deepEqual(
-    context.pendingSubtasks.slice(0, 3).map((entry) => entry.id),
-    ["craft_crafting_table", "place_crafting_table", "craft_wooden_pickaxe"],
+    context.pendingSubtasks.slice(0, 2).map((entry) => entry.id),
+    ["place_crafting_table", "craft_wooden_pickaxe"],
   );
 });

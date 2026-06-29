@@ -1,0 +1,2068 @@
+
+> mine0@0.1.0 jarvis:persistent
+> node --experimental-strip-types src/cli_persistent.ts Find and attack the zombie. Look around, approach the zombie, and use the sword.
+
+Mine0 — JARVIS persistent executor
+  host            : root@194.68.245.71:22072
+  worker port     : 8765
+  env-config      : kill/kill_zombie
+  max-frames/goal : 60
+  reset on start  : false
+  planner         : cerebras / gemma-4-31b
+  max decisions   : 3  (MINE0_MAX_DECISION_STEPS, floor=1)
+  objective       : Find and attack the zombie. Look around, approach the zombie, and use the sword.
+---
+[jarvis-persistent] reset-on-start=false — probing worker for existing session…
+[jarvis-persistent] Reusing session: 6c862289 (cumulativeStep: 247)
+
+=== DecisionTrace ===
+{
+  "traceId": "trace_4zzx7lkw",
+  "objective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+  "executor": "JARVIS-VLA persistent (root@194.68.245.71:22072, worker :8765)",
+  "mode": "greedy",
+  "startedAt": "2026-06-29T07:29:12.931Z",
+  "completedObjective": false,
+  "stopReason": "safety_step_limit_reached=3",
+  "totalDecisions": 3,
+  "steps": [
+    {
+      "stepNumber": 1,
+      "taskContext": {
+        "rootObjective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "activeSubtask": {
+          "id": "locate_trees",
+          "description": "Scan the surface for trees to obtain wood.",
+          "planningFocus": "visual search for logs",
+          "compound": false,
+          "parentId": "goal",
+          "expectedAction": "explore",
+          "targetCount": 1,
+          "destination": "surface"
+        },
+        "pendingSubtasks": [
+          {
+            "id": "locate_trees",
+            "description": "Scan the surface for trees to obtain wood.",
+            "planningFocus": "visual search for logs",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "collect_logs",
+            "description": "Collect oak logs for crafting.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "oak_log",
+            "targetCount": 3
+          },
+          {
+            "id": "craft_planks",
+            "description": "Convert logs into planks.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "planks",
+            "targetCount": 12
+          },
+          {
+            "id": "craft_sticks",
+            "description": "Craft sticks from planks.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stick",
+            "targetCount": 4
+          },
+          {
+            "id": "locate_stone",
+            "description": "Search for exposed stone or dig down to find cobblestone.",
+            "planningFocus": "visual search for stone",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "subterranean"
+          },
+          {
+            "id": "collect_cobblestone",
+            "description": "Collect cobblestone for the sword.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "cobblestone",
+            "targetCount": 3
+          },
+          {
+            "id": "place_crafting_table",
+            "description": "Place a crafting table to craft the sword.",
+            "planningFocus": "world state change",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "place",
+            "targetItem": "crafting_table",
+            "targetCount": 1
+          },
+          {
+            "id": "craft_stone_sword",
+            "description": "Craft a stone sword using sticks and cobblestone.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stone_sword",
+            "targetCount": 1
+          },
+          {
+            "id": "equip_stone_sword",
+            "description": "Equip the stone sword in the main hand.",
+            "planningFocus": "equipped slot change",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "equip",
+            "targetItem": "stone_sword",
+            "targetCount": 1
+          },
+          {
+            "id": "scan_for_zombie",
+            "description": "Look around the environment to locate the zombie entity.",
+            "planningFocus": "entity detection",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "scan",
+            "targetItem": "zombie",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "approach_zombie",
+            "description": "Move closer to the detected zombie.",
+            "planningFocus": "distance reduction",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetItem": "zombie",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "attack_zombie",
+            "description": "Use the sword to attack the zombie.",
+            "planningFocus": "entity health reduction",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "use",
+            "targetItem": "stone_sword",
+            "targetCount": 1
+          }
+        ],
+        "completedSubtasks": [],
+        "taskTree": {
+          "id": "goal",
+          "description": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+          "planningFocus": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+          "status": "active",
+          "children": [
+            {
+              "id": "locate_trees",
+              "description": "Scan the surface for trees to obtain wood.",
+              "planningFocus": "visual search for logs",
+              "status": "active",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_logs",
+              "description": "Collect oak logs for crafting.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "craft_planks",
+              "description": "Convert logs into planks.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "craft_sticks",
+              "description": "Craft sticks from planks.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "locate_stone",
+              "description": "Search for exposed stone or dig down to find cobblestone.",
+              "planningFocus": "visual search for stone",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_cobblestone",
+              "description": "Collect cobblestone for the sword.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "place_crafting_table",
+              "description": "Place a crafting table to craft the sword.",
+              "planningFocus": "world state change",
+              "status": "pending",
+              "expectedAction": "place",
+              "children": []
+            },
+            {
+              "id": "craft_stone_sword",
+              "description": "Craft a stone sword using sticks and cobblestone.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "equip_stone_sword",
+              "description": "Equip the stone sword in the main hand.",
+              "planningFocus": "equipped slot change",
+              "status": "pending",
+              "expectedAction": "equip",
+              "children": []
+            },
+            {
+              "id": "scan_for_zombie",
+              "description": "Look around the environment to locate the zombie entity.",
+              "planningFocus": "entity detection",
+              "status": "pending",
+              "expectedAction": "scan",
+              "children": []
+            },
+            {
+              "id": "approach_zombie",
+              "description": "Move closer to the detected zombie.",
+              "planningFocus": "distance reduction",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "attack_zombie",
+              "description": "Use the sword to attack the zombie.",
+              "planningFocus": "entity health reduction",
+              "status": "pending",
+              "expectedAction": "use",
+              "children": []
+            }
+          ]
+        }
+      },
+      "worldState": {
+        "timestamp": "2026-06-29T07:29:12.932Z",
+        "userObjective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "position": {
+          "x": 0,
+          "y": 64,
+          "z": 0
+        },
+        "biomeOrRegionHint": "unknown",
+        "health": 20,
+        "hunger": 20,
+        "inventory": [],
+        "equippedItem": "air",
+        "timeOfDay": "day",
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleHazards": [],
+        "perceivedResources": [],
+        "nearbyBlocks": [],
+        "nearbyEntities": [],
+        "lineOfSightTarget": null,
+        "interactionHints": [],
+        "goalProgress": 0.99
+      },
+      "perception": {
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleResources": [],
+        "terrainAffordances": [
+          "open_grass_path",
+          "reachable_tree_line",
+          "nearby_slope"
+        ],
+        "hazards": [
+          "none_immediate"
+        ],
+        "reachableTargets": [
+          "scan_for_resources"
+        ],
+        "confidenceNotes": [
+          "Perception is derived from Mineflayer structured state only.",
+          "Planner receives structured Mineflayer cues for nearby blocks, entities, line of sight, and interaction affordances."
+        ]
+      },
+      "memorySummary": [
+        "explore previously degraded with prediction_error=1.00 in Change search direction to avoid stagnant search loop and find trees on the surface.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "collect previously worked in collect the visible oak_log for the active subtask. issue_tags=progress_observed.",
+        "collect previously worked in collect the visible oak_log for the active subtask. issue_tags=progress_observed.",
+        "collect previously worked in collect the visible oak_log for the active subtask. issue_tags=progress_observed."
+      ],
+      "plannedFuture": {
+        "branchId": "plan_7yfmzeiy",
+        "strategy": "The active subtask is to scan the surface for trees. Since no logs are currently visible in the immediate scene but a 'reachable_tree_line' is noted in the terrain perception, I will explore in the direction of that tree line to bring logs into view.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "forward",
+            "location": "reachable_tree_line"
+          },
+          "reason": "The active subtask is to scan for trees; terrain perception indicates a reachable tree line, so I must move toward it to identify specific log blocks for collection."
+        },
+        "preconditions": [
+          "target is reachable",
+          "step budget remains bounded"
+        ],
+        "predictedSteps": [
+          {
+            "action": "Explore the surface to locate trees.",
+            "expectedResult": "Progress toward log."
+          },
+          {
+            "action": "verify outcome",
+            "expectedResult": "Inventory and scene should reflect the expected change."
+          }
+        ],
+        "successProbability": 0.76,
+        "estimatedSeconds": 14,
+        "risk": 0.09,
+        "resourceCost": 0,
+        "goalProgress": 0.12,
+        "likelyNextObservation": "Positioning should improve for the next action."
+      },
+      "selectedIntent": {
+        "objective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "instruction": "Explore the surface to locate trees.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "forward",
+            "location": "reachable_tree_line"
+          },
+          "reason": "The active subtask is to scan for trees; terrain perception indicates a reachable tree line, so I must move toward it to identify specific log blocks for collection."
+        },
+        "successCondition": {
+          "item": "log",
+          "count": 1
+        },
+        "maximumSteps": 180
+      },
+      "actionOutcome": {
+        "executedAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "forward",
+            "location": "reachable_tree_line"
+          },
+          "reason": "The active subtask is to scan for trees; terrain perception indicates a reachable tree line, so I must move toward it to identify specific log blocks for collection."
+        },
+        "status": "partial_success",
+        "durationSeconds": 29.9,
+        "inventoryDelta": [],
+        "healthDelta": 0,
+        "hungerDelta": 0,
+        "positionDelta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "visualVerification": {
+          "targetReached": false,
+          "terrainChangedAsExpected": false,
+          "hazardPresent": false
+        },
+        "failureReason": null,
+        "executor": "jarvis-persistent"
+      },
+      "verification": {
+        "predictionError": 1,
+        "matchedExpectation": false,
+        "notes": [
+          "predicted_item_gain=1",
+          "actual_item_gain=0",
+          "status=partial_success"
+        ],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ]
+      },
+      "storedMemory": {
+        "id": "memory_9wyz9o9z",
+        "objective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "actionType": "explore",
+        "environmentTags": [
+          "unknown",
+          "day"
+        ],
+        "failureType": null,
+        "hazardContext": [],
+        "resourceContext": [],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ],
+        "predictionError": 1,
+        "predictedFuture": {
+          "branchId": "plan_7yfmzeiy",
+          "strategy": "The active subtask is to scan the surface for trees. Since no logs are currently visible in the immediate scene but a 'reachable_tree_line' is noted in the terrain perception, I will explore in the direction of that tree line to bring logs into view.",
+          "candidateAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "forward",
+              "location": "reachable_tree_line"
+            },
+            "reason": "The active subtask is to scan for trees; terrain perception indicates a reachable tree line, so I must move toward it to identify specific log blocks for collection."
+          },
+          "preconditions": [
+            "target is reachable",
+            "step budget remains bounded"
+          ],
+          "predictedSteps": [
+            {
+              "action": "Explore the surface to locate trees.",
+              "expectedResult": "Progress toward log."
+            },
+            {
+              "action": "verify outcome",
+              "expectedResult": "Inventory and scene should reflect the expected change."
+            }
+          ],
+          "successProbability": 0.76,
+          "estimatedSeconds": 14,
+          "risk": 0.09,
+          "resourceCost": 0,
+          "goalProgress": 0.12,
+          "likelyNextObservation": "Positioning should improve for the next action."
+        },
+        "actualOutcome": {
+          "executedAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "forward",
+              "location": "reachable_tree_line"
+            },
+            "reason": "The active subtask is to scan for trees; terrain perception indicates a reachable tree line, so I must move toward it to identify specific log blocks for collection."
+          },
+          "status": "partial_success",
+          "durationSeconds": 29.9,
+          "inventoryDelta": [],
+          "healthDelta": 0,
+          "hungerDelta": 0,
+          "positionDelta": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "visualVerification": {
+            "targetReached": false,
+            "terrainChangedAsExpected": false,
+            "hazardPresent": false
+          },
+          "failureReason": null,
+          "executor": "jarvis-persistent"
+        },
+        "createdAt": "2026-06-29T07:29:45.707Z"
+      },
+      "planner": {
+        "callLog": [
+          {
+            "label": "perception_local",
+            "provider": "mock",
+            "model": "structured-local",
+            "status": "skipped",
+            "latencyMs": 0,
+            "usage": null,
+            "timeInfo": null,
+            "warning": "Model perception disabled to conserve tokens; using Mineflayer structured state."
+          },
+          {
+            "label": "planner",
+            "provider": "cerebras",
+            "model": "gemma-4-31b",
+            "status": "success",
+            "latencyMs": 368,
+            "usage": {
+              "promptTokens": 1181,
+              "completionTokens": 183,
+              "totalTokens": 1364
+            },
+            "timeInfo": {
+              "created": 1782718153.8645358,
+              "queue_time": 0.035612418,
+              "prompt_time": 0.039313405,
+              "completion_time": 0.138291576,
+              "total_time": 0.21451544761657715
+            },
+            "warning": null
+          }
+        ],
+        "proposals": [
+          {
+            "plannerId": "jarvis_vla_planner",
+            "strategy": "The active subtask is to scan the surface for trees. Since no logs are currently visible in the immediate scene but a 'reachable_tree_line' is noted in the terrain perception, I will explore in the direction of that tree line to bring logs into view.",
+            "instruction": "Explore the surface to locate trees.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "forward",
+                "location": "reachable_tree_line"
+              },
+              "reason": "The active subtask is to scan for trees; terrain perception indicates a reachable tree line, so I must move toward it to identify specific log blocks for collection."
+            }
+          }
+        ],
+        "scoredBranches": [
+          {
+            "branchId": "plan_7yfmzeiy",
+            "strategy": "The active subtask is to scan the surface for trees. Since no logs are currently visible in the immediate scene but a 'reachable_tree_line' is noted in the terrain perception, I will explore in the direction of that tree line to bring logs into view.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "forward",
+                "location": "reachable_tree_line"
+              },
+              "reason": "The active subtask is to scan for trees; terrain perception indicates a reachable tree line, so I must move toward it to identify specific log blocks for collection."
+            },
+            "score": 0,
+            "successProbability": 0.76,
+            "estimatedSeconds": 14,
+            "risk": 0.09,
+            "goalProgress": 0.12,
+            "notes": [
+              "single_decision_mode=true",
+              "selected_first_proposal=true"
+            ]
+          }
+        ],
+        "selectedBranchId": "plan_7yfmzeiy"
+      }
+    },
+    {
+      "stepNumber": 2,
+      "taskContext": {
+        "rootObjective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "activeSubtask": {
+          "id": "locate_trees",
+          "description": "Scan the surface for trees to obtain wood.",
+          "planningFocus": "visual search for logs",
+          "compound": false,
+          "parentId": "goal",
+          "expectedAction": "explore",
+          "targetCount": 1,
+          "destination": "surface"
+        },
+        "pendingSubtasks": [
+          {
+            "id": "locate_trees",
+            "description": "Scan the surface for trees to obtain wood.",
+            "planningFocus": "visual search for logs",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "collect_logs",
+            "description": "Collect oak logs for crafting.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "oak_log",
+            "targetCount": 3
+          },
+          {
+            "id": "craft_planks",
+            "description": "Convert logs into planks.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "planks",
+            "targetCount": 12
+          },
+          {
+            "id": "craft_sticks",
+            "description": "Craft sticks from planks.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stick",
+            "targetCount": 4
+          },
+          {
+            "id": "locate_stone",
+            "description": "Search for exposed stone or dig down to find cobblestone.",
+            "planningFocus": "visual search for stone",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "subterranean"
+          },
+          {
+            "id": "collect_cobblestone",
+            "description": "Collect cobblestone for the sword.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "cobblestone",
+            "targetCount": 3
+          },
+          {
+            "id": "place_crafting_table",
+            "description": "Place a crafting table to craft the sword.",
+            "planningFocus": "world state change",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "place",
+            "targetItem": "crafting_table",
+            "targetCount": 1
+          },
+          {
+            "id": "craft_stone_sword",
+            "description": "Craft a stone sword using sticks and cobblestone.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stone_sword",
+            "targetCount": 1
+          },
+          {
+            "id": "equip_stone_sword",
+            "description": "Equip the stone sword in the main hand.",
+            "planningFocus": "equipped slot change",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "equip",
+            "targetItem": "stone_sword",
+            "targetCount": 1
+          },
+          {
+            "id": "scan_for_zombie",
+            "description": "Look around the environment to locate the zombie entity.",
+            "planningFocus": "entity detection",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "scan",
+            "targetItem": "zombie",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "approach_zombie",
+            "description": "Move closer to the detected zombie.",
+            "planningFocus": "distance reduction",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetItem": "zombie",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "attack_zombie",
+            "description": "Use the sword to attack the zombie.",
+            "planningFocus": "entity health reduction",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "use",
+            "targetItem": "stone_sword",
+            "targetCount": 1
+          }
+        ],
+        "completedSubtasks": [],
+        "taskTree": {
+          "id": "goal",
+          "description": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+          "planningFocus": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+          "status": "active",
+          "children": [
+            {
+              "id": "locate_trees",
+              "description": "Scan the surface for trees to obtain wood.",
+              "planningFocus": "visual search for logs",
+              "status": "active",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_logs",
+              "description": "Collect oak logs for crafting.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "craft_planks",
+              "description": "Convert logs into planks.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "craft_sticks",
+              "description": "Craft sticks from planks.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "locate_stone",
+              "description": "Search for exposed stone or dig down to find cobblestone.",
+              "planningFocus": "visual search for stone",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_cobblestone",
+              "description": "Collect cobblestone for the sword.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "place_crafting_table",
+              "description": "Place a crafting table to craft the sword.",
+              "planningFocus": "world state change",
+              "status": "pending",
+              "expectedAction": "place",
+              "children": []
+            },
+            {
+              "id": "craft_stone_sword",
+              "description": "Craft a stone sword using sticks and cobblestone.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "equip_stone_sword",
+              "description": "Equip the stone sword in the main hand.",
+              "planningFocus": "equipped slot change",
+              "status": "pending",
+              "expectedAction": "equip",
+              "children": []
+            },
+            {
+              "id": "scan_for_zombie",
+              "description": "Look around the environment to locate the zombie entity.",
+              "planningFocus": "entity detection",
+              "status": "pending",
+              "expectedAction": "scan",
+              "children": []
+            },
+            {
+              "id": "approach_zombie",
+              "description": "Move closer to the detected zombie.",
+              "planningFocus": "distance reduction",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "attack_zombie",
+              "description": "Use the sword to attack the zombie.",
+              "planningFocus": "entity health reduction",
+              "status": "pending",
+              "expectedAction": "use",
+              "children": []
+            },
+            {
+              "id": "locate_oak_log",
+              "description": "Locate sources of oak log",
+              "planningFocus": "locate trees on the surface to obtain wood",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            }
+          ]
+        }
+      },
+      "worldState": {
+        "timestamp": "2026-06-29T07:29:45.708Z",
+        "userObjective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "position": {
+          "x": 0,
+          "y": 64,
+          "z": 0
+        },
+        "biomeOrRegionHint": "unknown",
+        "health": 20,
+        "hunger": 20,
+        "inventory": [],
+        "equippedItem": "air",
+        "timeOfDay": "day",
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleHazards": [],
+        "perceivedResources": [],
+        "nearbyBlocks": [],
+        "nearbyEntities": [],
+        "lineOfSightTarget": null,
+        "interactionHints": [],
+        "goalProgress": 0.99
+      },
+      "perception": {
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleResources": [],
+        "terrainAffordances": [
+          "open_grass_path",
+          "reachable_tree_line",
+          "nearby_slope"
+        ],
+        "hazards": [
+          "none_immediate"
+        ],
+        "reachableTargets": [
+          "scan_for_resources"
+        ],
+        "confidenceNotes": [
+          "Perception is derived from Mineflayer structured state only.",
+          "Planner receives structured Mineflayer cues for nearby blocks, entities, line of sight, and interaction affordances."
+        ]
+      },
+      "memorySummary": [
+        "explore previously degraded with prediction_error=1.00 in The active subtask is to scan the surface for trees. Since no logs are currently visible in the immediate scene but a 'reachable_tree_line' is noted in the terrain perception, I will explore in the direction of that tree line to bring logs into view.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in Change search direction to avoid stagnant search loop and find trees on the surface.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "collect previously worked in collect the visible oak_log for the active subtask. issue_tags=progress_observed.",
+        "collect previously worked in collect the visible oak_log for the active subtask. issue_tags=progress_observed."
+      ],
+      "plannedFuture": {
+        "branchId": "plan_701y3hqb",
+        "strategy": "Change search direction to avoid stagnant patterns and locate the reachable tree line identified in perception.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "north",
+            "location": "reachable_tree_line"
+          },
+          "reason": "The previous explore action resulted in a prediction error and no movement; changing direction to north to reach the identified tree line on the surface."
+        },
+        "preconditions": [
+          "target is reachable",
+          "step budget remains bounded"
+        ],
+        "predictedSteps": [
+          {
+            "action": "Explore the surface in a new direction to find trees, targeting the reachable tree line.",
+            "expectedResult": "Progress toward log."
+          },
+          {
+            "action": "verify outcome",
+            "expectedResult": "Inventory and scene should reflect the expected change."
+          }
+        ],
+        "successProbability": 0.76,
+        "estimatedSeconds": 14,
+        "risk": 0.09,
+        "resourceCost": 0,
+        "goalProgress": 0.12,
+        "likelyNextObservation": "Positioning should improve for the next action."
+      },
+      "selectedIntent": {
+        "objective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "instruction": "Explore the surface in a new direction to find trees, targeting the reachable tree line.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "north",
+            "location": "reachable_tree_line"
+          },
+          "reason": "The previous explore action resulted in a prediction error and no movement; changing direction to north to reach the identified tree line on the surface."
+        },
+        "successCondition": {
+          "item": "log",
+          "count": 1
+        },
+        "maximumSteps": 180
+      },
+      "actionOutcome": {
+        "executedAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "north",
+            "location": "reachable_tree_line"
+          },
+          "reason": "The previous explore action resulted in a prediction error and no movement; changing direction to north to reach the identified tree line on the surface."
+        },
+        "status": "partial_success",
+        "durationSeconds": 27,
+        "inventoryDelta": [],
+        "healthDelta": 0,
+        "hungerDelta": 0,
+        "positionDelta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "visualVerification": {
+          "targetReached": false,
+          "terrainChangedAsExpected": false,
+          "hazardPresent": false
+        },
+        "failureReason": null,
+        "executor": "jarvis-persistent"
+      },
+      "verification": {
+        "predictionError": 1,
+        "matchedExpectation": false,
+        "notes": [
+          "predicted_item_gain=1",
+          "actual_item_gain=0",
+          "status=partial_success"
+        ],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ]
+      },
+      "storedMemory": {
+        "id": "memory_1g3jngcs",
+        "objective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "actionType": "explore",
+        "environmentTags": [
+          "unknown",
+          "day"
+        ],
+        "failureType": null,
+        "hazardContext": [],
+        "resourceContext": [],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ],
+        "predictionError": 1,
+        "predictedFuture": {
+          "branchId": "plan_701y3hqb",
+          "strategy": "Change search direction to avoid stagnant patterns and locate the reachable tree line identified in perception.",
+          "candidateAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "north",
+              "location": "reachable_tree_line"
+            },
+            "reason": "The previous explore action resulted in a prediction error and no movement; changing direction to north to reach the identified tree line on the surface."
+          },
+          "preconditions": [
+            "target is reachable",
+            "step budget remains bounded"
+          ],
+          "predictedSteps": [
+            {
+              "action": "Explore the surface in a new direction to find trees, targeting the reachable tree line.",
+              "expectedResult": "Progress toward log."
+            },
+            {
+              "action": "verify outcome",
+              "expectedResult": "Inventory and scene should reflect the expected change."
+            }
+          ],
+          "successProbability": 0.76,
+          "estimatedSeconds": 14,
+          "risk": 0.09,
+          "resourceCost": 0,
+          "goalProgress": 0.12,
+          "likelyNextObservation": "Positioning should improve for the next action."
+        },
+        "actualOutcome": {
+          "executedAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "north",
+              "location": "reachable_tree_line"
+            },
+            "reason": "The previous explore action resulted in a prediction error and no movement; changing direction to north to reach the identified tree line on the surface."
+          },
+          "status": "partial_success",
+          "durationSeconds": 27,
+          "inventoryDelta": [],
+          "healthDelta": 0,
+          "hungerDelta": 0,
+          "positionDelta": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "visualVerification": {
+            "targetReached": false,
+            "terrainChangedAsExpected": false,
+            "hazardPresent": false
+          },
+          "failureReason": null,
+          "executor": "jarvis-persistent"
+        },
+        "createdAt": "2026-06-29T07:30:14.789Z"
+      },
+      "planner": {
+        "callLog": [
+          {
+            "label": "perception_local",
+            "provider": "mock",
+            "model": "structured-local",
+            "status": "skipped",
+            "latencyMs": 0,
+            "usage": null,
+            "timeInfo": null,
+            "warning": "Model perception disabled to conserve tokens; using Mineflayer structured state."
+          },
+          {
+            "label": "planner",
+            "provider": "cerebras",
+            "model": "gemma-4-31b",
+            "status": "success",
+            "latencyMs": 401,
+            "usage": {
+              "promptTokens": 1338,
+              "completionTokens": 151,
+              "totalTokens": 1489
+            },
+            "timeInfo": {
+              "created": 1782718185.8882577,
+              "queue_time": 0.002510698,
+              "prompt_time": 0.041328082,
+              "completion_time": 0.094223352,
+              "total_time": 0.13935112953186035
+            },
+            "warning": null
+          }
+        ],
+        "proposals": [
+          {
+            "plannerId": "jarvis_vla_planner",
+            "strategy": "Change search direction to avoid stagnant patterns and locate the reachable tree line identified in perception.",
+            "instruction": "Explore the surface in a new direction to find trees, targeting the reachable tree line.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "north",
+                "location": "reachable_tree_line"
+              },
+              "reason": "The previous explore action resulted in a prediction error and no movement; changing direction to north to reach the identified tree line on the surface."
+            }
+          }
+        ],
+        "scoredBranches": [
+          {
+            "branchId": "plan_701y3hqb",
+            "strategy": "Change search direction to avoid stagnant patterns and locate the reachable tree line identified in perception.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "north",
+                "location": "reachable_tree_line"
+              },
+              "reason": "The previous explore action resulted in a prediction error and no movement; changing direction to north to reach the identified tree line on the surface."
+            },
+            "score": 0,
+            "successProbability": 0.76,
+            "estimatedSeconds": 14,
+            "risk": 0.09,
+            "goalProgress": 0.12,
+            "notes": [
+              "single_decision_mode=true",
+              "selected_first_proposal=true"
+            ]
+          }
+        ],
+        "selectedBranchId": "plan_701y3hqb"
+      }
+    },
+    {
+      "stepNumber": 3,
+      "taskContext": {
+        "rootObjective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "activeSubtask": {
+          "id": "locate_trees",
+          "description": "Scan the surface for trees to obtain wood.",
+          "planningFocus": "visual search for logs",
+          "compound": false,
+          "parentId": "goal",
+          "expectedAction": "explore",
+          "targetCount": 1,
+          "destination": "surface"
+        },
+        "pendingSubtasks": [
+          {
+            "id": "locate_trees",
+            "description": "Scan the surface for trees to obtain wood.",
+            "planningFocus": "visual search for logs",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "collect_logs",
+            "description": "Collect oak logs for crafting.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "oak_log",
+            "targetCount": 3
+          },
+          {
+            "id": "craft_planks",
+            "description": "Convert logs into planks.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "planks",
+            "targetCount": 12
+          },
+          {
+            "id": "craft_sticks",
+            "description": "Craft sticks from planks.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stick",
+            "targetCount": 4
+          },
+          {
+            "id": "locate_stone",
+            "description": "Search for exposed stone or dig down to find cobblestone.",
+            "planningFocus": "visual search for stone",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "subterranean"
+          },
+          {
+            "id": "collect_cobblestone",
+            "description": "Collect cobblestone for the sword.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "cobblestone",
+            "targetCount": 3
+          },
+          {
+            "id": "place_crafting_table",
+            "description": "Place a crafting table to craft the sword.",
+            "planningFocus": "world state change",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "place",
+            "targetItem": "crafting_table",
+            "targetCount": 1
+          },
+          {
+            "id": "craft_stone_sword",
+            "description": "Craft a stone sword using sticks and cobblestone.",
+            "planningFocus": "inventory delta",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stone_sword",
+            "targetCount": 1
+          },
+          {
+            "id": "equip_stone_sword",
+            "description": "Equip the stone sword in the main hand.",
+            "planningFocus": "equipped slot change",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "equip",
+            "targetItem": "stone_sword",
+            "targetCount": 1
+          },
+          {
+            "id": "scan_for_zombie",
+            "description": "Look around the environment to locate the zombie entity.",
+            "planningFocus": "entity detection",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "scan",
+            "targetItem": "zombie",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "approach_zombie",
+            "description": "Move closer to the detected zombie.",
+            "planningFocus": "distance reduction",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetItem": "zombie",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "attack_zombie",
+            "description": "Use the sword to attack the zombie.",
+            "planningFocus": "entity health reduction",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "use",
+            "targetItem": "stone_sword",
+            "targetCount": 1
+          }
+        ],
+        "completedSubtasks": [],
+        "taskTree": {
+          "id": "goal",
+          "description": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+          "planningFocus": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+          "status": "active",
+          "children": [
+            {
+              "id": "locate_trees",
+              "description": "Scan the surface for trees to obtain wood.",
+              "planningFocus": "visual search for logs",
+              "status": "active",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_logs",
+              "description": "Collect oak logs for crafting.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "craft_planks",
+              "description": "Convert logs into planks.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "craft_sticks",
+              "description": "Craft sticks from planks.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "locate_stone",
+              "description": "Search for exposed stone or dig down to find cobblestone.",
+              "planningFocus": "visual search for stone",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_cobblestone",
+              "description": "Collect cobblestone for the sword.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "place_crafting_table",
+              "description": "Place a crafting table to craft the sword.",
+              "planningFocus": "world state change",
+              "status": "pending",
+              "expectedAction": "place",
+              "children": []
+            },
+            {
+              "id": "craft_stone_sword",
+              "description": "Craft a stone sword using sticks and cobblestone.",
+              "planningFocus": "inventory delta",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "equip_stone_sword",
+              "description": "Equip the stone sword in the main hand.",
+              "planningFocus": "equipped slot change",
+              "status": "pending",
+              "expectedAction": "equip",
+              "children": []
+            },
+            {
+              "id": "scan_for_zombie",
+              "description": "Look around the environment to locate the zombie entity.",
+              "planningFocus": "entity detection",
+              "status": "pending",
+              "expectedAction": "scan",
+              "children": []
+            },
+            {
+              "id": "approach_zombie",
+              "description": "Move closer to the detected zombie.",
+              "planningFocus": "distance reduction",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "attack_zombie",
+              "description": "Use the sword to attack the zombie.",
+              "planningFocus": "entity health reduction",
+              "status": "pending",
+              "expectedAction": "use",
+              "children": []
+            },
+            {
+              "id": "locate_oak_log",
+              "description": "Locate sources of oak log",
+              "planningFocus": "locate trees on the surface to obtain wood",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            }
+          ]
+        }
+      },
+      "worldState": {
+        "timestamp": "2026-06-29T07:30:14.791Z",
+        "userObjective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "position": {
+          "x": 0,
+          "y": 64,
+          "z": 0
+        },
+        "biomeOrRegionHint": "unknown",
+        "health": 20,
+        "hunger": 20,
+        "inventory": [],
+        "equippedItem": "air",
+        "timeOfDay": "day",
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleHazards": [],
+        "perceivedResources": [],
+        "nearbyBlocks": [],
+        "nearbyEntities": [],
+        "lineOfSightTarget": null,
+        "interactionHints": [],
+        "goalProgress": 0.99
+      },
+      "perception": {
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleResources": [],
+        "terrainAffordances": [
+          "open_grass_path",
+          "reachable_tree_line",
+          "nearby_slope"
+        ],
+        "hazards": [
+          "none_immediate"
+        ],
+        "reachableTargets": [
+          "scan_for_resources"
+        ],
+        "confidenceNotes": [
+          "Perception is derived from Mineflayer structured state only.",
+          "Planner receives structured Mineflayer cues for nearby blocks, entities, line of sight, and interaction affordances."
+        ]
+      },
+      "memorySummary": [
+        "explore previously degraded with prediction_error=1.00 in Change search direction to avoid stagnant patterns and locate the reachable tree line identified in perception.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in The active subtask is to scan the surface for trees. Since no logs are currently visible in the immediate scene but a 'reachable_tree_line' is noted in the terrain perception, I will explore in the direction of that tree line to bring logs into view.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in Change search direction to avoid stagnant search loop and find trees on the surface.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "collect previously worked in collect the visible oak_log for the active subtask. issue_tags=progress_observed."
+      ],
+      "plannedFuture": {
+        "branchId": "plan_aet5rbtk",
+        "strategy": "Change search direction to avoid stagnant search loop and locate trees on the surface, as previous forward and north movements failed to yield results.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+        },
+        "preconditions": [
+          "target is reachable",
+          "step budget remains bounded"
+        ],
+        "predictedSteps": [
+          {
+            "action": "Explore the surface in a new direction (east) to locate trees for wood collection.",
+            "expectedResult": "Progress toward log."
+          },
+          {
+            "action": "verify outcome",
+            "expectedResult": "Inventory and scene should reflect the expected change."
+          }
+        ],
+        "successProbability": 0.76,
+        "estimatedSeconds": 14,
+        "risk": 0.09,
+        "resourceCost": 0,
+        "goalProgress": 0.12,
+        "likelyNextObservation": "Positioning should improve for the next action."
+      },
+      "selectedIntent": {
+        "objective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "instruction": "Explore the surface in a new direction (east) to locate trees for wood collection.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+        },
+        "successCondition": {
+          "item": "log",
+          "count": 1
+        },
+        "maximumSteps": 180
+      },
+      "actionOutcome": {
+        "executedAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+        },
+        "status": "partial_success",
+        "durationSeconds": 28.6,
+        "inventoryDelta": [],
+        "healthDelta": 0,
+        "hungerDelta": 0,
+        "positionDelta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "visualVerification": {
+          "targetReached": false,
+          "terrainChangedAsExpected": false,
+          "hazardPresent": false
+        },
+        "failureReason": null,
+        "executor": "jarvis-persistent"
+      },
+      "verification": {
+        "predictionError": 1,
+        "matchedExpectation": false,
+        "notes": [
+          "predicted_item_gain=1",
+          "actual_item_gain=0",
+          "status=partial_success"
+        ],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ]
+      },
+      "storedMemory": {
+        "id": "memory_omgqk347",
+        "objective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+        "actionType": "explore",
+        "environmentTags": [
+          "unknown",
+          "day"
+        ],
+        "failureType": null,
+        "hazardContext": [],
+        "resourceContext": [],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ],
+        "predictionError": 1,
+        "predictedFuture": {
+          "branchId": "plan_aet5rbtk",
+          "strategy": "Change search direction to avoid stagnant search loop and locate trees on the surface, as previous forward and north movements failed to yield results.",
+          "candidateAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "east",
+              "location": "surface"
+            },
+            "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+          },
+          "preconditions": [
+            "target is reachable",
+            "step budget remains bounded"
+          ],
+          "predictedSteps": [
+            {
+              "action": "Explore the surface in a new direction (east) to locate trees for wood collection.",
+              "expectedResult": "Progress toward log."
+            },
+            {
+              "action": "verify outcome",
+              "expectedResult": "Inventory and scene should reflect the expected change."
+            }
+          ],
+          "successProbability": 0.76,
+          "estimatedSeconds": 14,
+          "risk": 0.09,
+          "resourceCost": 0,
+          "goalProgress": 0.12,
+          "likelyNextObservation": "Positioning should improve for the next action."
+        },
+        "actualOutcome": {
+          "executedAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "east",
+              "location": "surface"
+            },
+            "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+          },
+          "status": "partial_success",
+          "durationSeconds": 28.6,
+          "inventoryDelta": [],
+          "healthDelta": 0,
+          "hungerDelta": 0,
+          "positionDelta": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "visualVerification": {
+            "targetReached": false,
+            "terrainChangedAsExpected": false,
+            "hazardPresent": false
+          },
+          "failureReason": null,
+          "executor": "jarvis-persistent"
+        },
+        "createdAt": "2026-06-29T07:30:45.513Z"
+      },
+      "planner": {
+        "callLog": [
+          {
+            "label": "perception_local",
+            "provider": "mock",
+            "model": "structured-local",
+            "status": "skipped",
+            "latencyMs": 0,
+            "usage": null,
+            "timeInfo": null,
+            "warning": "Model perception disabled to conserve tokens; using Mineflayer structured state."
+          },
+          {
+            "label": "planner",
+            "provider": "cerebras",
+            "model": "gemma-4-31b",
+            "status": "success",
+            "latencyMs": 392,
+            "usage": {
+              "promptTokens": 1483,
+              "completionTokens": 152,
+              "totalTokens": 1635
+            },
+            "timeInfo": {
+              "created": 1782718214.9926784,
+              "queue_time": 0.003027505,
+              "prompt_time": 0.015395797,
+              "completion_time": 0.120887924,
+              "total_time": 0.14071297645568848
+            },
+            "warning": null
+          }
+        ],
+        "proposals": [
+          {
+            "plannerId": "mine0_planner",
+            "strategy": "Change search direction to avoid stagnant search loop and locate trees on the surface, as previous forward and north movements failed to yield results.",
+            "instruction": "Explore the surface in a new direction (east) to locate trees for wood collection.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "east",
+                "location": "surface"
+              },
+              "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+            }
+          }
+        ],
+        "scoredBranches": [
+          {
+            "branchId": "plan_aet5rbtk",
+            "strategy": "Change search direction to avoid stagnant search loop and locate trees on the surface, as previous forward and north movements failed to yield results.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "east",
+                "location": "surface"
+              },
+              "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+            },
+            "score": 0,
+            "successProbability": 0.76,
+            "estimatedSeconds": 14,
+            "risk": 0.09,
+            "goalProgress": 0.12,
+            "notes": [
+              "single_decision_mode=true",
+              "selected_first_proposal=true"
+            ]
+          }
+        ],
+        "selectedBranchId": "plan_aet5rbtk"
+      }
+    }
+  ],
+  "worldState": {
+    "timestamp": "2026-06-29T07:30:14.791Z",
+    "userObjective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+    "position": {
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "biomeOrRegionHint": "unknown",
+    "health": 20,
+    "hunger": 20,
+    "inventory": [],
+    "equippedItem": "air",
+    "timeOfDay": "day",
+    "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+    "visibleHazards": [],
+    "perceivedResources": [],
+    "nearbyBlocks": [],
+    "nearbyEntities": [],
+    "lineOfSightTarget": null,
+    "interactionHints": [],
+    "goalProgress": 0.99
+  },
+  "perception": {
+    "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+    "visibleResources": [],
+    "terrainAffordances": [
+      "open_grass_path",
+      "reachable_tree_line",
+      "nearby_slope"
+    ],
+    "hazards": [
+      "none_immediate"
+    ],
+    "reachableTargets": [
+      "scan_for_resources"
+    ],
+    "confidenceNotes": [
+      "Perception is derived from Mineflayer structured state only.",
+      "Planner receives structured Mineflayer cues for nearby blocks, entities, line of sight, and interaction affordances."
+    ]
+  },
+  "memorySummary": [
+    "explore previously degraded with prediction_error=1.00 in Change search direction to avoid stagnant patterns and locate the reachable tree line identified in perception.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+    "explore previously degraded with prediction_error=1.00 in The active subtask is to scan the surface for trees. Since no logs are currently visible in the immediate scene but a 'reachable_tree_line' is noted in the terrain perception, I will explore in the direction of that tree line to bring logs into view.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+    "explore previously degraded with prediction_error=1.00 in Change search direction to avoid stagnant search loop and find trees on the surface.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+    "explore previously degraded with prediction_error=1.00 in Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+    "collect previously worked in collect the visible oak_log for the active subtask. issue_tags=progress_observed."
+  ],
+  "plannedFuture": {
+    "branchId": "plan_aet5rbtk",
+    "strategy": "Change search direction to avoid stagnant search loop and locate trees on the surface, as previous forward and north movements failed to yield results.",
+    "candidateAction": {
+      "name": "explore",
+      "arguments": {
+        "block_type": "log",
+        "item": "log",
+        "count": 1,
+        "direction": "east",
+        "location": "surface"
+      },
+      "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+    },
+    "preconditions": [
+      "target is reachable",
+      "step budget remains bounded"
+    ],
+    "predictedSteps": [
+      {
+        "action": "Explore the surface in a new direction (east) to locate trees for wood collection.",
+        "expectedResult": "Progress toward log."
+      },
+      {
+        "action": "verify outcome",
+        "expectedResult": "Inventory and scene should reflect the expected change."
+      }
+    ],
+    "successProbability": 0.76,
+    "estimatedSeconds": 14,
+    "risk": 0.09,
+    "resourceCost": 0,
+    "goalProgress": 0.12,
+    "likelyNextObservation": "Positioning should improve for the next action."
+  },
+  "selectedIntent": {
+    "objective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+    "instruction": "Explore the surface in a new direction (east) to locate trees for wood collection.",
+    "candidateAction": {
+      "name": "explore",
+      "arguments": {
+        "block_type": "log",
+        "item": "log",
+        "count": 1,
+        "direction": "east",
+        "location": "surface"
+      },
+      "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+    },
+    "successCondition": {
+      "item": "log",
+      "count": 1
+    },
+    "maximumSteps": 180
+  },
+  "actionOutcome": {
+    "executedAction": {
+      "name": "explore",
+      "arguments": {
+        "block_type": "log",
+        "item": "log",
+        "count": 1,
+        "direction": "east",
+        "location": "surface"
+      },
+      "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+    },
+    "status": "partial_success",
+    "durationSeconds": 28.6,
+    "inventoryDelta": [],
+    "healthDelta": 0,
+    "hungerDelta": 0,
+    "positionDelta": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "visualVerification": {
+      "targetReached": false,
+      "terrainChangedAsExpected": false,
+      "hazardPresent": false
+    },
+    "failureReason": null,
+    "executor": "jarvis-persistent"
+  },
+  "verification": {
+    "predictionError": 1,
+    "matchedExpectation": false,
+    "notes": [
+      "predicted_item_gain=1",
+      "actual_item_gain=0",
+      "status=partial_success"
+    ],
+    "issueTags": [
+      "stagnant_search",
+      "partial_progress"
+    ],
+    "suggestedFixes": [
+      "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+      "continue from the updated state, but account for the unmet remainder of the subtask."
+    ]
+  },
+  "storedMemory": {
+    "id": "memory_omgqk347",
+    "objective": "Find and attack the zombie. Look around, approach the zombie, and use the sword.",
+    "actionType": "explore",
+    "environmentTags": [
+      "unknown",
+      "day"
+    ],
+    "failureType": null,
+    "hazardContext": [],
+    "resourceContext": [],
+    "issueTags": [
+      "stagnant_search",
+      "partial_progress"
+    ],
+    "suggestedFixes": [
+      "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+      "continue from the updated state, but account for the unmet remainder of the subtask."
+    ],
+    "predictionError": 1,
+    "predictedFuture": {
+      "branchId": "plan_aet5rbtk",
+      "strategy": "Change search direction to avoid stagnant search loop and locate trees on the surface, as previous forward and north movements failed to yield results.",
+      "candidateAction": {
+        "name": "explore",
+        "arguments": {
+          "block_type": "log",
+          "item": "log",
+          "count": 1,
+          "direction": "east",
+          "location": "surface"
+        },
+        "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+      },
+      "preconditions": [
+        "target is reachable",
+        "step budget remains bounded"
+      ],
+      "predictedSteps": [
+        {
+          "action": "Explore the surface in a new direction (east) to locate trees for wood collection.",
+          "expectedResult": "Progress toward log."
+        },
+        {
+          "action": "verify outcome",
+          "expectedResult": "Inventory and scene should reflect the expected change."
+        }
+      ],
+      "successProbability": 0.76,
+      "estimatedSeconds": 14,
+      "risk": 0.09,
+      "resourceCost": 0,
+      "goalProgress": 0.12,
+      "likelyNextObservation": "Positioning should improve for the next action."
+    },
+    "actualOutcome": {
+      "executedAction": {
+        "name": "explore",
+        "arguments": {
+          "block_type": "log",
+          "item": "log",
+          "count": 1,
+          "direction": "east",
+          "location": "surface"
+        },
+        "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+      },
+      "status": "partial_success",
+      "durationSeconds": 28.6,
+      "inventoryDelta": [],
+      "healthDelta": 0,
+      "hungerDelta": 0,
+      "positionDelta": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "visualVerification": {
+        "targetReached": false,
+        "terrainChangedAsExpected": false,
+        "hazardPresent": false
+      },
+      "failureReason": null,
+      "executor": "jarvis-persistent"
+    },
+    "createdAt": "2026-06-29T07:30:45.513Z"
+  },
+  "planner": {
+    "providerMode": "cerebras",
+    "configuredModel": "gemma-4-31b",
+    "callLog": [
+      {
+        "label": "perception_local",
+        "provider": "mock",
+        "model": "structured-local",
+        "status": "skipped",
+        "latencyMs": 0,
+        "usage": null,
+        "timeInfo": null,
+        "warning": "Model perception disabled to conserve tokens; using Mineflayer structured state."
+      },
+      {
+        "label": "planner",
+        "provider": "cerebras",
+        "model": "gemma-4-31b",
+        "status": "success",
+        "latencyMs": 392,
+        "usage": {
+          "promptTokens": 1483,
+          "completionTokens": 152,
+          "totalTokens": 1635
+        },
+        "timeInfo": {
+          "created": 1782718214.9926784,
+          "queue_time": 0.003027505,
+          "prompt_time": 0.015395797,
+          "completion_time": 0.120887924,
+          "total_time": 0.14071297645568848
+        },
+        "warning": null
+      }
+    ],
+    "proposals": [
+      {
+        "plannerId": "mine0_planner",
+        "strategy": "Change search direction to avoid stagnant search loop and locate trees on the surface, as previous forward and north movements failed to yield results.",
+        "instruction": "Explore the surface in a new direction (east) to locate trees for wood collection.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+        }
+      }
+    ],
+    "scoredBranches": [
+      {
+        "branchId": "plan_aet5rbtk",
+        "strategy": "Change search direction to avoid stagnant search loop and locate trees on the surface, as previous forward and north movements failed to yield results.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous attempts to explore forward and north were stagnant; changing direction to east to find the reachable_tree_line mentioned in terrain perception."
+        },
+        "score": 0,
+        "successProbability": 0.76,
+        "estimatedSeconds": 14,
+        "risk": 0.09,
+        "goalProgress": 0.12,
+        "notes": [
+          "single_decision_mode=true",
+          "selected_first_proposal=true"
+        ]
+      }
+    ],
+    "selectedBranchId": "plan_aet5rbtk"
+  }
+}
+
+=== JARVIS Persistent Artifacts (last step) ===
+  sessionId              : 6c862289
+  reusedSession          : true
+  cumulativeStepBefore   : 367
+  cumulativeStepAfter    : 427
+  remoteExecutionSucceeded: true
+  taskSucceeded          : null (no reward signal)
+  actionCount            : 60
+  durationSeconds        : 28.6
+  latestScreenshotPath   : /workspace/JarvisVLA/mine0_persistent/latest_pov.png
+  actions (first 5):
+    {"buttons":1,"camera":221}
+    {"buttons":1,"camera":221}
+    {"buttons":1,"camera":221}
+    {"buttons":1,"camera":222}
+    {"buttons":1,"camera":221}

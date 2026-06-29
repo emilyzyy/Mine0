@@ -1,12 +1,9 @@
-import { readdir, writeFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import type { CandidateAction, InventoryStack, Position3 } from "../contracts/index.ts";
 import { loadPlannerConfig } from "../shared/config.ts";
 import { isoNow } from "../shared/logger.ts";
 import { projectPath } from "../shared/fs.ts";
-
-const EMPTY_PNG_BASE64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sP7L4wAAAAASUVORK5CYII=";
 
 export interface MockWorldSnapshot {
   position: Position3;
@@ -65,21 +62,13 @@ export class MockMinecraftWorld {
     this.frameIndex = 0;
   }
 
-  async captureFrame(): Promise<string> {
+  async captureFrame(): Promise<string | null> {
     this.frameIndex += 1;
 
-    const sampleFrame = await this.resolveSampleFrame();
-    if (sampleFrame) {
-      return sampleFrame;
-    }
-
-    const fileName = `step_${String(this.frameIndex).padStart(3, "0")}.png`;
-    const absolutePath = projectPath("artifacts", "frames", fileName);
-    await writeFile(absolutePath, Buffer.from(EMPTY_PNG_BASE64, "base64"));
-    return absolutePath;
+    return await this.resolveSampleFrame();
   }
 
-  snapshot(userObjective: string, sceneSummary: string | null) {
+  snapshot(userObjective: string, sceneSummary: string | null, screenshotPath: string | null = null) {
     return {
       timestamp: isoNow(),
       userObjective,
@@ -98,6 +87,7 @@ export class MockMinecraftWorld {
       lineOfSightTarget: this.perceivedResources[0] ?? null,
       interactionHints: ["tree_visible", "stone_visible", "structured_perception_only"],
       goalProgress: this.estimateGoalProgress(userObjective),
+      screenshotPath,
     };
   }
 

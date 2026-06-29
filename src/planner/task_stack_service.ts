@@ -6,6 +6,7 @@ import {
   countInventoryItem,
   craftFailureNeedsWorkstation,
   extractCraftItemFromFocus,
+  parseMissingCraftIngredients,
   prependWorkstationPrerequisites,
 } from "./craft_prerequisites.ts";
 import {
@@ -224,7 +225,55 @@ function decomposeGenericObjective(objective: string): Subtask[] | null {
   ];
 }
 
+const COMBAT_OBJECTIVE_RE = /\b(zombie|zombies|attack|fight|kill|sword|mob|hostile|combat)\b/i;
+
 function decomposeRootObjective(objective: string, worldState: WorldState): Subtask[] {
+  // Combat/zombie objectives use a fixed combat sequence — no crafting prerequisites.
+  if (COMBAT_OBJECTIVE_RE.test(objective)) {
+    return [
+      {
+        id: "scan_for_zombie",
+        description: "Scan the area for a zombie",
+        planningFocus: "scan for a zombie or hostile mob nearby",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "scan",
+      },
+      {
+        id: "orient_to_zombie",
+        description: "Orient toward the zombie",
+        planningFocus: "turn to face the zombie",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "scan",
+      },
+      {
+        id: "approach_zombie",
+        description: "Approach the zombie",
+        planningFocus: "approach the zombie using movement",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "explore",
+      },
+      {
+        id: "attack_zombie",
+        description: "Attack the zombie with sword",
+        planningFocus: "attack zombie with sword",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "use",
+      },
+      {
+        id: "verify_zombie_outcome",
+        description: "Verify the zombie was defeated",
+        planningFocus: "scan for remaining zombies",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "scan",
+      },
+    ];
+  }
+
   const normalized = objective.toLowerCase();
   const sequentialTasks = decomposeSequentialObjective(objective);
   if (sequentialTasks.length > 0) {
@@ -332,6 +381,34 @@ function buildMissingPlacementPrerequisites(subtask: Subtask, worldState: WorldS
   }
 
   return [];
+}
+
+function buildCraftFailureRecoverySubtasks(
+  craftItem: string,
+  failureReason: string | null | undefined,
+  worldState: WorldState,
+  parentId: string,
+): Subtask[] {
+  const missingIngredients = parseMissingCraftIngredients(failureReason);
+  if (missingIngredients.length === 0) {
+    return [];
+  }
+
+  const recovery: Subtask[] = [];
+  for (const ingredient of missingIngredients) {
+    if (inventoryHasItem(worldState.inventory, ingredient.item, ingredient.count)) {
+      continue;
+    }
+    recovery.push(...expandObtainItemChain(ingredient.item, worldState, parentId));
+  }
+
+  if (recovery.length === 0) {
+    return [];
+  }
+
+  return assignPrerequisiteHierarchy(recovery, parentId).filter((task, index, list) =>
+    list.findIndex((candidate) => candidate.id === task.id && candidate.planningFocus === task.planningFocus) === index,
+  );
 }
 
 function makeCollectSubtask(id: string, description: string, focus: string): Subtask {
@@ -753,13 +830,55 @@ export class TaskStackService {
     const normalized = subtasks.map((subtask) => ({
       ...subtask,
       compound: false,
-      parentId: subtask.parentId ?? active?.parentId ?? "goal",
+      parentId: !subtask.parentId || subtask.parentId === "goal"
+        ? active?.id ?? "goal"
+        : subtask.parentId,
     })).filter((subtask) => !existingIds.has(subtask.id));
     if (normalized.length === 0) {
       return;
     }
     this.registerTasks(normalized);
     this.pending = [...normalized, ...this.pending];
+  }
+
+  replaceActiveSubtask(subtasks: Subtask[]): void {
+    const active = this.pending[0];
+    if (!active || subtasks.length === 0) {
+      return;
+    }
+
+    const remaining = this.pending.slice(1);
+    const existingIds = new Set(remaining.map((subtask) => subtask.id));
+    const normalized = subtasks.map((subtask) => ({
+      ...subtask,
+      compound: false,
+      parentId: !subtask.parentId || subtask.parentId === "goal"
+        ? active.id
+        : subtask.parentId,
+    })).filter((subtask) => subtask.id !== active.id && !existingIds.has(subtask.id));
+    if (normalized.length === 0) {
+      return;
+    }
+
+    this.registerTasks(normalized);
+    this.pending = [...normalized, ...remaining];
+  }
+
+  activeSubtaskNeedsExpansion(): boolean {
+    const active = this.pending[0];
+    if (!active) {
+      return false;
+    }
+
+    if (active.compound) {
+      return true;
+    }
+
+    if (!active.expectedAction) {
+      return true;
+    }
+
+    return false;
   }
 
   reconcile(worldState: WorldState): void {
@@ -831,6 +950,18 @@ export class TaskStackService {
       return;
     }
 
+    // Repetitive action loop on a scan subtask: the bot is spinning in place.
+    // Force-advance to the next subtask instead of retrying the same scan.
+    if (
+      !options.skipFailureHeuristics &&
+      current.expectedAction === "scan" &&
+      verification?.issueTags.includes("repetitive_action_loop")
+    ) {
+      this.completed.push(this.pending.shift() as Subtask);
+      this.reconcile(worldState);
+      return;
+    }
+
     if (outcome.status === "failed" && !options.skipFailureHeuristics) {
       const craftItem = String(intent.candidateAction.arguments.item ?? "");
       if (
@@ -839,6 +970,20 @@ export class TaskStackService {
       ) {
         const prereqs = buildWorkstationPrerequisiteSubtasks(worldState, craftItem);
         if (prereqs.length > 0) {
+          this.pending = [...prereqs, current, ...this.pending.slice(1)];
+          return;
+        }
+      }
+
+      if (intent.candidateAction.name === "craft" && craftItem) {
+        const prereqs = buildCraftFailureRecoverySubtasks(
+          craftItem,
+          outcome.failureReason,
+          worldState,
+          current.parentId ?? current.id,
+        );
+        if (prereqs.length > 0) {
+          this.registerTasks(prereqs);
           this.pending = [...prereqs, current, ...this.pending.slice(1)];
           return;
         }
@@ -1009,6 +1154,10 @@ export class TaskStackService {
   }
 
   private expandPendingHead(worldState: WorldState): void {
+    if (this.llmPlanned) {
+      return;
+    }
+
     while (this.pending[0]?.compound) {
       const head = this.pending[0];
       if (!head) {

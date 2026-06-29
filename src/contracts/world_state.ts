@@ -39,6 +39,7 @@ export interface WorldState {
   lineOfSightTarget: string | null;
   interactionHints: string[];
   goalProgress: number;
+  screenshotPath?: string | null;
 }
 
 export function parsePosition3(value: unknown, label: string): Position3 {
@@ -108,5 +109,9 @@ export function parseWorldState(value: unknown): WorldState {
       "WorldState.interactionHints",
     ),
     goalProgress: assertNumber(objectValue.goalProgress, "WorldState.goalProgress"),
+    screenshotPath: assertOptionalString(
+      objectValue.screenshotPath,
+      "WorldState.screenshotPath",
+    ),
   };
 }

@@ -11,11 +11,12 @@ const app = new Mine0App();
 const config = loadPlannerConfig();
 const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public");
 let lastTrace: unknown = null;
+let currentAbortController: AbortController | null = null;
 let currentRunState: {
   running: boolean;
   startedAt: string | null;
   objective: string | null;
-  executorKind: "jarvis" | "mineflayer" | null;
+  executorKind: "jarvis" | "jarvis-persistent" | "mineflayer" | null;
   mode: "greedy" | "multiverse" | null;
   completedObjective: boolean;
   stopReason: string | null;
@@ -93,6 +94,21 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/api/end-run") {
+      if (!currentRunState.running || !currentAbortController) {
+        sendJson(response, 200, { ok: true, running: false, stopReason: currentRunState.stopReason });
+        return;
+      }
+
+      currentRunState = {
+        ...currentRunState,
+        stopReason: "user_cancelled",
+      };
+      currentAbortController.abort();
+      sendJson(response, 200, { ok: true, running: true, stopReason: "user_cancelled" });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/frame") {
       const requestedPath = url.searchParams.get("path");
       if (!requestedPath) {
@@ -125,7 +141,7 @@ const server = createServer(async (request, response) => {
       const raw = Buffer.concat(chunks).toString("utf8");
       const body = JSON.parse(raw) as {
         objective?: string;
-        executorKind?: "jarvis" | "mineflayer";
+        executorKind?: "jarvis" | "jarvis-persistent" | "mineflayer";
         mode?: "greedy" | "multiverse";
       };
 
@@ -138,8 +154,16 @@ const server = createServer(async (request, response) => {
       const input: RunCycleInput = {
         objective,
         executorKind: body.executorKind ?? (config.mineflayer.enabled ? "mineflayer" : "jarvis"),
-        mode: body.mode ?? "multiverse",
+        mode: body.mode ?? "greedy",
       };
+
+      if (currentRunState.running) {
+        sendJson(response, 409, { error: "A run is already in progress." });
+        return;
+      }
+
+      currentAbortController = new AbortController();
+      input.signal = currentAbortController.signal;
 
       currentRunState = {
         running: true,
@@ -174,12 +198,25 @@ const server = createServer(async (request, response) => {
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown run error";
+        if (message === "Run cancelled by user.") {
+          currentRunState = {
+            ...currentRunState,
+            running: false,
+            stopReason: "user_cancelled",
+            error: null,
+          };
+          sendJson(response, 200, { cancelled: true });
+          return;
+        }
+
         currentRunState = {
           ...currentRunState,
           running: false,
           error: message,
         };
         throw error;
+      } finally {
+        currentAbortController = null;
       }
 
       sendJson(response, 200, { trace: lastTrace });

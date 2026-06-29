@@ -864,6 +864,75 @@ test("PlannerService does not propose stone pickaxe craft without a nearby works
   assert.notEqual(String(proposal.candidateAction.arguments.item ?? ""), "stone_pickaxe");
 });
 
+test("PlannerService keeps craft proposals aligned to the active craft subtask", async () => {
+  const { PlannerService } = await import("../src/planner/planner_service.ts");
+
+  const planner = new PlannerService();
+  const result = await planner.proposeCandidates(
+    {
+      timestamp: new Date().toISOString(),
+      userObjective: "mine diamonds",
+      position: { x: 0, y: 64, z: 0 },
+      biomeOrRegionHint: "forest_edge",
+      health: 20,
+      hunger: 20,
+      inventory: [
+        { item: "oak_log", count: 3 },
+        { item: "planks", count: 8 },
+        { item: "stick", count: 14 },
+        { item: "crafting_table", count: 1 },
+      ],
+      equippedItem: "air",
+      timeOfDay: "day",
+      sceneSummary: null,
+      visibleHazards: [],
+      perceivedResources: [],
+      nearbyBlocks: ["crafting_table", "grass"],
+      nearbyEntities: [],
+      lineOfSightTarget: "crafting_table",
+      interactionHints: ["crafting_table_nearby"],
+      goalProgress: 0.4,
+    },
+    [],
+    {
+      sceneSummary: "A placed crafting table is available nearby.",
+      visibleResources: [],
+      terrainAffordances: ["open_ground"],
+      hazards: [],
+      reachableTargets: ["crafting_table"],
+      confidenceNotes: [],
+    },
+    [],
+    {
+      rootObjective: "mine diamonds",
+      activeSubtask: {
+        id: "craft_furnace",
+        description: "Craft a furnace using cobblestone",
+        planningFocus: "craft one furnace",
+        compound: false,
+        expectedAction: "craft",
+        targetItem: "furnace",
+      },
+      pendingSubtasks: [
+        {
+          id: "craft_furnace",
+          description: "Craft a furnace using cobblestone",
+          planningFocus: "craft one furnace",
+          compound: false,
+          expectedAction: "craft",
+          targetItem: "furnace",
+        },
+      ],
+      completedSubtasks: [],
+    },
+  );
+
+  const proposal = result.proposals[0];
+  assert.ok(proposal, "expected a proposal");
+  assert.notEqual(String(proposal.candidateAction.arguments.item ?? ""), "stick");
+  assert.notEqual(String(proposal.candidateAction.arguments.item ?? ""), "planks");
+});
+
 test("PlannerService switches to downward exploration when underground search is looping", async () => {
   const { PlannerService } = await import("../src/planner/planner_service.ts");
 

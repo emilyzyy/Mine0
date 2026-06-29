@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { loadPlannerConfig, type PlannerConfig } from "../shared/config.ts";
 
 export interface ProviderUsage {
@@ -24,7 +26,14 @@ interface TextContentPart {
   text: string;
 }
 
-type MessageContent = string | Array<TextContentPart>;
+interface ImageUrlContentPart {
+  type: "image_url";
+  image_url: {
+    url: string;
+  };
+}
+
+type MessageContent = string | Array<TextContentPart | ImageUrlContentPart>;
 
 interface ChatMessage {
   role: ChatRole;
@@ -76,8 +85,36 @@ export class CerebrasClient {
     this.config = config;
   }
 
-  async buildUserContent(text: string): Promise<MessageContent> {
-    return text;
+  async buildUserContent(text: string, screenshotPath?: string | null): Promise<MessageContent> {
+    if (!this.config.imageInputEnabled || !screenshotPath || this.config.model !== "gemma-4-31b") {
+      return text;
+    }
+
+    try {
+      const imageBytes = await readFile(screenshotPath);
+      const extension = path.extname(screenshotPath).toLowerCase();
+      const mimeType =
+        extension === ".jpg" || extension === ".jpeg"
+          ? "image/jpeg"
+          : extension === ".png"
+            ? "image/png"
+            : null;
+      if (!mimeType) {
+        return text;
+      }
+
+      return [
+        { type: "text", text },
+        {
+          type: "image_url",
+          image_url: {
+            url: `data:${mimeType};base64,${imageBytes.toString("base64")}`,
+          },
+        },
+      ];
+    } catch {
+      return text;
+    }
   }
 
   async requestStructured<T>(request: StructuredRequest): Promise<StructuredResponse<T>> {
