@@ -138,7 +138,7 @@ const server = createServer(async (request, response) => {
       const input: RunCycleInput = {
         objective,
         executorKind: body.executorKind ?? (config.mineflayer.enabled ? "mineflayer" : "jarvis"),
-        mode: body.mode ?? "multiverse",
+        mode: body.mode ?? "greedy",
       };
 
       currentRunState = {

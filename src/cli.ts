@@ -14,7 +14,7 @@ const executorKind = resolveExecutorKind(
   executorArg?.slice("--executor=".length),
   config.mineflayer.enabled,
 );
-const mode = modeArg?.slice("--mode=".length) === "greedy" ? "greedy" : "multiverse";
+const mode = modeArg?.slice("--mode=".length) === "multiverse" ? "multiverse" : "greedy";
 
 const app = new Mine0App();
 const trace = await app.runCycle({

@@ -9,18 +9,19 @@ For now, Mine0 must stay in `single-proposal mode` to limit API usage.
 - A run may continue across many decision steps; stop it only when the objective is complete or the bot is clearly stuck in a loop.
 - Treat any future multiverse or parallel-planner work as disabled until this guardrail is intentionally removed.
 
-Phase 0+ scaffold for the Mine0 project plan: shared contracts, schema validation, multiverse planner loop, pluggable executor interface, and a minimal prompt-box dashboard.
+Phase 0+ scaffold for the Mine0 project plan: shared contracts, schema validation, a single-proposal planning loop, a pluggable executor interface, and a minimal prompt-box dashboard.
 
 ## What is implemented
 
 - canonical contracts for `WorldState`, `CandidateAction`, `PredictedFuture`, `SubgoalIntent`, `ActionOutcome`, and `MemoryEntry`
 - zero-dependency runtime validation and parsing
-- executor abstraction with `jarvis` mock and `mineflayer` live-or-mock backends
+- executor abstraction with two user-facing routes: `jarvis` and `mineflayer`
+- optional `jarvis-persistent` demo tooling behind the shared executor contract for JARVIS control-layer work
 - shared Gemma task decomposition, refinement, and task-stack flow for both routes, with route-specific prompt context
 - Cerebras-backed perception, planning, rollout, and critic services with mock fallback
 - end-to-end decision loop driven by a freeform objective
 - simple HTTP server with a prompt box and live branch/output view
-- baseline comparison scaffold for greedy vs multiverse mode
+- baseline comparison scaffold for greedy vs future multiverse mode
 
 ## Quick start
 
@@ -139,6 +140,7 @@ node --experimental-strip-types --test tests/*.test.ts
 - `jarvis` is still a mock executor.
 - `mineflayer` now supports a real local bot session when the Mineflayer environment variables are configured, and otherwise falls back to the mock world so tests and local exploration stay stable.
 - Backend choice is explicit per run. Mine0 does not auto-switch between Jarvis and Mineflayer mid-run, and it always executes the first selected planner approach.
+- The shared Gemma perception, task decomposition, task refinement, and task-stack logic now frame prompts for the active route so Jarvis planning stays Jarvis-oriented and Mineflayer behavior stays unchanged.
 - The planner reads `CEREBRAS_API_KEY`, `CEREBRAS_MODEL`, and `CEREBRAS_FALLBACK_MODEL` from the environment. If no API key is set, the app falls back to heuristic planner-side behavior.
 - If `MINE0_SCREENSHOT_DIR` contains `.png`, `.jpg`, `.jpeg`, or `.webp` frames, the mock executor will use those files as the screenshot input in lexicographic order instead of the placeholder frame.
 - `CEREBRAS_ENABLE_IMAGE_INPUT=1` will attach those screenshots to the Cerebras perception prompt.

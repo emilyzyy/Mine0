@@ -11,11 +11,11 @@ Until API-usage limits are loosened, the live codebase should stay in `single-de
 
 ## Working Title
 
-**MineZero / Mine0**: a Cerebras-powered multiverse planner that learns to play Minecraft by imagining several possible futures before acting.
+**MineZero / Mine0**: a Cerebras-powered Minecraft agent that plans one bounded next action at a time from a natural-language objective.
 
 ## Core Pitch
 
-Traditional embodied agents often have to choose between acting quickly and reasoning broadly. Mine0 uses Cerebras to explore multiple candidate futures in parallel before the Minecraft world has time to change, then commits to the best next action.
+Traditional embodied agents often have to choose between acting quickly and reasoning clearly. Mine0 uses Cerebras and Gemma to interpret the current game state, choose one bounded next action, execute it through the explicitly selected route, verify the result, and replan.
 
 The goal is not to train a new end-to-end policy from scratch. The goal is to combine:
 
@@ -43,7 +43,7 @@ The initial polished demo should still use a controlled survival world and a sim
 
 `Gather wood, craft a crafting table, and obtain a wooden or stone pickaxe.`
 
-Use a fixed seed with nearby trees and exposed stone. The compelling part is not reaching diamonds. The compelling part is watching several planning branches disagree, simulate outcomes, select a plan, act, discover whether they were right, and adapt after the user gives Mine0 a natural-language objective.
+Use a fixed seed with nearby trees and exposed stone. The compelling part is not reaching diamonds. The compelling part is watching the agent decompose the objective, execute the next concrete step, verify what happened, and adapt after the user gives Mine0 a natural-language objective.
 
 ## System Overview
 
@@ -87,7 +87,7 @@ High-level flow:
 Suggested positioning:
 
 - Gemma = planner and strategist
-- Cerebras = parallel future simulation engine
+- Cerebras = fast LLM inference provider
 - JARVIS-VLA = visuomotor controller
 - MineStudio = environment and action interface
 
@@ -166,9 +166,9 @@ Responsibilities:
 - Gemma perception agent
 - user-prompt interpretation
 - goal decomposition
-- concurrent planner agents
-- parallel future rollout agents
-- critic and universe scoring
+- single selected planner proposal
+- task decomposition and refinement for the active route
+- route-aware prompt framing
 - selected next subgoal
 - memory injection into prompts
 - branch data for the dashboard
@@ -397,7 +397,7 @@ In single-decision mode, propose one bounded next step for the current state and
 
 ### Rollout Stage
 
-Rollout fan-out is disabled in the live path for now.
+Rollout fan-out is disabled in the live path for now and should remain disabled unless the guardrail is intentionally revisited.
 
 Each selected step should still predict:
 
@@ -537,11 +537,11 @@ The evaluation should compare two modes on the same fixed seed.
 
 ### Greedy Baseline
 
-One planning agent selects the next action immediately with no multiverse rollout competition.
+One planning agent selects the next action immediately and executes the first valid proposal.
 
-### Mine0 Multiverse Mode
+### Future Multiverse Mode
 
-Several branches imagine futures, score them, and then act.
+Several branches could imagine futures, score them, and then act, but that path is intentionally disabled in the current live implementation.
 
 ### Metrics
 
@@ -649,9 +649,9 @@ Success criteria:
 
 Build:
 
-- branch tree UI
+- decision trace UI
 - latency display
-- selected branch highlight
+- selected action highlight
 - baseline comparison mode
 - replay artifacts
 
@@ -711,8 +711,8 @@ Mitigation:
 
 Mitigation:
 
-- show branch-level latency and provider comparison
-- keep rollout outputs compact and structured
+- show step-level latency and provider comparison
+- keep planner outputs compact and structured
 
 ### Risk: Too much surface area at once
 

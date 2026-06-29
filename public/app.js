@@ -262,7 +262,7 @@ form.addEventListener("submit", async (event) => {
   const payload = {
     objective: document.getElementById("objective").value,
     executorKind: document.getElementById("executorKind").value,
-    mode: "multiverse",
+    mode: "greedy",
   };
 
   startLivePolling();
