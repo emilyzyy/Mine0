@@ -760,50 +760,85 @@ describe("overrideCombatSubtaskIntent — non-JARVIS/non-combat paths unchanged"
 // Phase 6 — scan loop force-advance in TaskStackService
 // ---------------------------------------------------------------------------
 
+// Shared fixtures for scan-loop tests
+const scanIntent: SubgoalIntent = {
+  objective: "Kill zombies",
+  instruction: "Look around for a zombie",
+  candidateAction: { name: "scan", arguments: { direction: "forward" }, reason: "scan" },
+  successCondition: { item: "zombie_defeated", count: 1 },
+  maximumSteps: 180,
+};
+const loopOutcome = {
+  executedAction: { name: "scan", arguments: { direction: "forward" }, reason: "scan" },
+  status: "failed" as const,
+  durationSeconds: 5,
+  inventoryDelta: [] as never[],
+  healthDelta: 0,
+  hungerDelta: 0,
+  positionDelta: { x: 0, y: 0, z: 0 },
+  visualVerification: { targetReached: false, terrainChangedAsExpected: false, hazardPresent: false },
+  failureReason: "repetitive_action_loop:camera_drift:ratio=0.9",
+  executor: "jarvis-persistent" as const,
+};
+const loopVerification = {
+  predictionError: 0.45,
+  matchedExpectation: false,
+  notes: [] as string[],
+  issueTags: ["repetitive_action_loop"],
+  suggestedFixes: ["switch to next subtask"] as string[],
+};
+
+// The zombie combat subtasks that the LLM would return (mirrors what Cerebras
+// produces for a "Kill zombies" objective when the prompts are working).
+const zombieLlmSubtasks = [
+  { id: "scan_for_zombie",     description: "Scan the area for a zombie",     planningFocus: "scan for zombie", compound: false, expectedAction: "scan" },
+  { id: "orient_to_zombie",    description: "Orient toward the zombie",         planningFocus: "orient to zombie", compound: false, expectedAction: "scan" },
+  { id: "approach_zombie",     description: "Approach the zombie",              planningFocus: "approach zombie",  compound: false, expectedAction: "explore" },
+  { id: "attack_zombie",       description: "Attack the zombie with sword",     planningFocus: "attack zombie",    compound: false, expectedAction: "use" },
+  { id: "verify_zombie_outcome", description: "Verify zombie was defeated",     planningFocus: "verify outcome",   compound: false, expectedAction: "scan" },
+];
+
 describe("scan repetitive_action_loop forces advance to next subtask", () => {
-  it("after loop detection on scan_for_zombie, activeSubtask advances to orient/approach", () => {
+  it("heuristic path (skipFailureHeuristics=false): advances past scan_for_zombie on loop", () => {
     const service = new TaskStackService();
     service.reset("Kill zombies", zombieWorldState as never);
-    const ctx1 = service.getContext();
-    assert.equal(ctx1.activeSubtask?.id, "scan_for_zombie",
-      "Expected scan_for_zombie to be the first active subtask");
-
-    const scanIntent: SubgoalIntent = {
-      objective: "Kill zombies",
-      instruction: "Look around for a zombie",
-      candidateAction: { name: "scan", arguments: { direction: "forward" }, reason: "scan" },
-      successCondition: { item: "zombie_defeated", count: 1 },
-      maximumSteps: 180,
-    };
-    const loopOutcome = {
-      executedAction: { name: "scan", arguments: { direction: "forward" }, reason: "scan" },
-      status: "failed" as const,
-      durationSeconds: 5,
-      inventoryDelta: [] as never[],
-      healthDelta: 0,
-      hungerDelta: 0,
-      positionDelta: { x: 0, y: 0, z: 0 },
-      visualVerification: { targetReached: false, terrainChangedAsExpected: false, hazardPresent: false },
-      failureReason: "repetitive_action_loop:camera_drift:ratio=0.9",
-      executor: "jarvis-persistent" as const,
-    };
-    const loopVerification = {
-      predictionError: 0.45,
-      matchedExpectation: false,
-      notes: [] as string[],
-      issueTags: ["repetitive_action_loop"],
-      suggestedFixes: ["switch to next subtask"] as string[],
-    };
+    assert.equal(service.getContext().activeSubtask?.id, "scan_for_zombie");
 
     service.onStepComplete(
       scanIntent as never,
       loopOutcome as never,
       zombieWorldState as never,
       loopVerification,
+      // skipFailureHeuristics defaults to false — heuristic path
     );
 
-    const ctx2 = service.getContext();
-    assert.notEqual(ctx2.activeSubtask?.id, "scan_for_zombie",
-      "After scan loop, scan_for_zombie should be completed and next subtask should be active");
+    assert.notEqual(service.getContext().activeSubtask?.id, "scan_for_zombie",
+      "Heuristic path: scan_for_zombie must be advanced after loop detection");
+  });
+
+  it("live path (llmPlanned=true, skipFailureHeuristics=true): advances past scan_for_zombie on loop", () => {
+    // This test reproduces the live failure:
+    //   - taskStack is LLM-planned (Cerebras returned subtasks)
+    //   - decision_loop calls onStepComplete with skipFailureHeuristics=true
+    //   - the old code guarded force-advance with !skipFailureHeuristics, so scan looped forever
+    const service = new TaskStackService();
+    service.reset("Kill zombies", zombieWorldState as never, {
+      llmSubtasks: zombieLlmSubtasks as never,
+    });
+    assert.equal(service.getContext().activeSubtask?.id, "scan_for_zombie",
+      "Setup: scan_for_zombie must be the first active subtask");
+
+    service.onStepComplete(
+      scanIntent as never,
+      loopOutcome as never,
+      zombieWorldState as never,
+      loopVerification,
+      { skipFailureHeuristics: true },  // mirrors llmRefined=true in decision_loop
+    );
+
+    const ctx = service.getContext();
+    assert.notEqual(ctx.activeSubtask?.id, "scan_for_zombie",
+      "Live path: scan_for_zombie must NOT remain active after repetitive_action_loop — " +
+      "it was stuck because !skipFailureHeuristics blocked the force-advance");
   });
 });
