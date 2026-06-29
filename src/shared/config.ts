@@ -103,7 +103,7 @@ export function loadPlannerConfig(): PlannerConfig {
     rolloutTarget: Math.max(3, Math.min(6, readNumber(process.env.MINE0_ROLLOUT_TARGET, 5))),
     temperature: Math.max(0, Math.min(1, readNumber(process.env.MINE0_TEMPERATURE, 0.2))),
     maxOutputTokens: Math.max(400, readNumber(process.env.MINE0_MAX_OUTPUT_TOKENS, 1400)),
-    maxDecisionSteps: Math.max(25, readNumber(process.env.MINE0_MAX_DECISION_STEPS, 250)),
+    maxDecisionSteps: Math.max(1, readNumber(process.env.MINE0_MAX_DECISION_STEPS, 250)),
     maxStalledSteps: Math.max(2, Math.min(20, readNumber(process.env.MINE0_MAX_STALLED_STEPS, 6))),
     maxRepeatedActionFailures: Math.max(
       2,

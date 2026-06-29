@@ -71,6 +71,15 @@ export class JarvisRemoteExecutor implements ExecutorBackend {
   // additional telemetry infrastructure.  Return a placeholder WorldState
   // that reflects the configured task so the planner/perception pipeline
   // can still run.
+  //
+  // TODO: this placeholder is identical every call — position, inventory,
+  // health, and goalProgress never change.  isMeaningfulProgress() therefore
+  // always returns false, which causes the stalled-step counter to increment
+  // every iteration and triggers an early stopReason="stuck_no_meaningful_progress"
+  // even when JARVIS is making real in-game progress.
+  // Fix: pipe live telemetry back over the SSH session (e.g. a sidecar JSON
+  // endpoint on the remote host), or at minimum update goalProgress from the
+  // parsed JARVIS action count / reward signal after each execute() call.
   async observe(userObjective: string): Promise<ExecutorObservation> {
     await ensureProjectDirectories();
     return {

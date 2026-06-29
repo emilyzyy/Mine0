@@ -16,7 +16,18 @@ import { loadJarvisConfig } from "./shared/config.ts";
 import { type JarvisRemoteArtifacts } from "./executor/jarvis_remote_executor.ts";
 import { projectPath } from "./shared/fs.ts";
 
+// loadJarvisConfig() calls loadLocalEnv() internally, which populates process.env
+// from .env before we apply the JARVIS-specific default below.
 const config = loadJarvisConfig();
+
+// Each JARVIS SSH rollout costs ~2 minutes.  Default to a single decision step
+// so a demo run takes one rollout, not many.  Override with
+// MINE0_MAX_DECISION_STEPS=N in .env or the shell to run more steps.
+if (process.env["MINE0_MAX_DECISION_STEPS"] === undefined) {
+  process.env["MINE0_MAX_DECISION_STEPS"] = "1";
+}
+const effectiveMaxSteps = Number(process.env["MINE0_MAX_DECISION_STEPS"]);
+
 const objective = process.argv.slice(2).join(" ").trim() || "Kill zombies";
 
 console.log("Mine0 — JARVIS remote executor");
@@ -25,6 +36,7 @@ console.log(`  key         : ${config.keyPath}`);
 console.log(`  remote repo : ${config.remoteRepo}`);
 console.log(`  env-config  : ${config.envConfig}`);
 console.log(`  max-frames  : ${config.maxFrames}`);
+console.log(`  max decisions: ${effectiveMaxSteps}  (set MINE0_MAX_DECISION_STEPS to change)`);
 console.log(`  objective   : ${objective}`);
 console.log("---");
 
