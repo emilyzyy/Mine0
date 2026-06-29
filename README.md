@@ -1,5 +1,7 @@
 # Mine0
 
+**Running the JARVIS persistent demo?** See the [JARVIS Runbook](docs/JARVIS_RUNBOOK.md).
+
 ## Current Guardrail
 
 For now, Mine0 must stay in `single-proposal mode` to limit API usage.
