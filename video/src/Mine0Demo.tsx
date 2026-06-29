@@ -37,6 +37,7 @@ export const Mine0Demo: React.FC<DemoProps> = (props) => {
           hasUiTree={props.hasUiTree}
           hasMcPov={props.hasMcPov}
           hasSideBySide={props.hasSideBySide}
+          demoAssetMode={props.demoAssetMode}
         />
       </Sequence>
 

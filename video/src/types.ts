@@ -5,4 +5,5 @@ export interface DemoProps {
   hasTerminal: boolean;
   hasLogo: boolean;
   objective: string;
+  demoAssetMode: 'auto' | 'mock' | 'clips';
 }

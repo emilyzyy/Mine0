@@ -29,16 +29,43 @@ Place clips into `video/public/clips/` and rerun `npm run render`. No code chang
 
 | File | What it replaces |
 |------|-----------------|
-| `ui_tree.mp4` | Left panel placeholder in the main demo scene |
-| `minecraft_pov.mp4` | Right panel placeholder in the main demo scene |
+| `ui_tree.mp4` | Left panel in the main demo scene |
+| `minecraft_pov.mp4` | Right panel in the main demo scene |
 | `side_by_side.mp4` | Both panels — used as a single full-width recording if present |
-| `terminal.mp4` | Reserved slot (shown in studio preview) |
+| `terminal.mp4` | Reserved slot |
 | `logo.png` | Reserved logo slot |
 
 **Priority:**
 - If `side_by_side.mp4` exists → used full-width in scene 4.
 - Otherwise → `ui_tree.mp4` (left) and `minecraft_pov.mp4` (right) side by side.
-- If either is missing → clean animated placeholder renders instead. **No crash.**
+- If neither exists → the **animated demo replay fallback** renders automatically.
+
+---
+
+## Demo replay fallback
+
+When no clips are available the main demo scene renders a fully animated
+"system walkthrough" — no placeholder text, no missing-clip warnings.
+
+**Left panel — Mine0 task/world model:**
+9 tasks animate live (`task_001` → `task_009`), each transitioning
+`pending → active → complete / verified`. Active rows glow green with a
+progress bar; completed tasks reveal a concise note.
+
+**Right panel — stylized Minecraft POV:**
+A CSS/SVG POV advances through 6 phases:
+1. Outdoor night → inspect inventory (missing helmet slot highlighted)
+2. Cave transition → mine iron ore (ore-break particles)
+3. Furnace panel → smelt ingots (fill bar + output slot)
+4. Crafting table → helmet recipe (staggered ingot appearance)
+5. Equip animation → helmet flies to armor slot
+6. Verify → verifier + memory badges
+
+**Bottom strip:** Live event log cycling `[GOAL]` `[PLAN]` `[STATE]` `[ACT]` `[VER]` `[MEM]`
+events as the walkthrough progresses.
+
+The watermark reads "system walkthrough" — not "live gameplay".
+No fake latency numbers. Cerebras/Gemma "plans from structured context", not from live video.
 
 ---
 
@@ -58,6 +85,7 @@ inspect individual scenes, and test with different props.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DEMO_OBJECTIVE` | `Find resources, reason through subtasks, and act in Minecraft.` | Objective shown in scene 2 |
+| `DEMO_ASSET_MODE` | `auto` | `auto` — use clips if present, else demo replay; `mock` — force demo replay even if clips exist; `clips` — require real clips, exit 1 if missing |
 
 ---
 
