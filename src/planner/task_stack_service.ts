@@ -879,10 +879,12 @@ export class TaskStackService {
       return;
     }
 
-    // Repetitive action loop on a scan subtask: the bot is spinning in place.
-    // Force-advance to the next subtask instead of retrying the same scan.
+    // Repetitive action loop on a scan subtask: force-advance unconditionally.
+    // skipFailureHeuristics does NOT suppress this because the LLM refinement
+    // path calls prependSubtasks() then reconcile() — reconcile rebuilds pending
+    // from rootSubtasks and wipes the prepended entries, so the refinement has
+    // zero net effect on the stack and the scan would otherwise loop forever.
     if (
-      !options.skipFailureHeuristics &&
       current.expectedAction === "scan" &&
       verification?.issueTags.includes("repetitive_action_loop")
     ) {
