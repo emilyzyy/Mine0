@@ -1,131 +1,198 @@
 # Mine0
 
-**Running the JARVIS persistent demo?** See the [JARVIS Runbook](docs/JARVIS_RUNBOOK.md).
+Mine0 is a Minecraft agent orchestration layer that uses Cerebras-hosted Gemma for recursive goal planning and routes subtasks through a unified execution layer, including an experimental persistent JARVIS-VLA backend for embodied Minecraft control.
 
-## Current Guardrail
+---
 
-For now, Mine0 must stay in `single-proposal mode` to limit API usage.
+## How it works
 
-- Generate only one planner proposal per step.
-- Execute the first valid approach instead of branching into rollouts or critic scoring.
-- A run may continue across many decision steps; stop it only when the objective is complete or the bot is clearly stuck in a loop.
-- Treat any future multiverse or parallel-planner work as disabled until this guardrail is intentionally removed.
+```
+User objective
+  → Mine0 recursive planner (Cerebras / Gemma-4-31b)
+  → Cerebras/Gemma decomposes objective into ordered subtasks
+  → Mine0 executor interface
+  → execution backend:
+      · JARVIS persistent VLA backend   (embodied visual control via RunPod)
+      · Mineflayer control backend      (stable Minecraft scripting adapter)
+  → outcome / verification / memory
+  → next decision step
+```
 
-Phase 0+ scaffold for the Mine0 project plan: shared contracts, schema validation, a single-proposal planning loop, a pluggable executor interface, and a minimal prompt-box dashboard.
+The planner does not care which executor is used. It emits structured subgoal intents; executors translate those intents into Minecraft actions. Switching backends does not change the planning or memory layers.
 
-## What is implemented
+---
 
-- canonical contracts for `WorldState`, `CandidateAction`, `PredictedFuture`, `SubgoalIntent`, `ActionOutcome`, and `MemoryEntry`
-- zero-dependency runtime validation and parsing
-- executor abstraction with two user-facing routes: `jarvis` and `mineflayer`
-- optional `jarvis-persistent` demo tooling behind the shared executor contract for JARVIS control-layer work
-- shared Gemma task decomposition, refinement, and task-stack flow for both routes, with route-specific prompt context
-- Cerebras-backed perception, planning, rollout, and critic services with mock fallback
-- end-to-end decision loop driven by a freeform objective
-- simple HTTP server with a prompt box and live branch/output view
-- baseline comparison scaffold for greedy vs future multiverse mode
+## Run the Mine0 demo
 
-## Quick start
+> **Node 24 required.** Run `nvm use 24` before anything else — Node 18 silently fails on `--experimental-strip-types`.
 
-Run the web scaffold:
+### Verify everything passes first
+
+```bash
+nvm use 24
+npm run check        # 128 tests — must all pass
+```
+
+### JARVIS persistent backend (primary VLA demo)
+
+See [JARVIS Persistent Backend](#jarvis-persistent-backend) below.
+
+### Mineflayer control backend (stable demo execution)
+
+```bash
+export CEREBRAS_API_KEY="your_key_here"
+
+MINE0_MINEFLAYER_ENABLED=1 \
+MINE0_MINEFLAYER_HOST=127.0.0.1 \
+MINE0_MINEFLAYER_PORT=25565 \
+MINE0_MINEFLAYER_USERNAME=Mine0Bot \
+MINE0_MINEFLAYER_AUTH=offline \
+npm run demo -- "Gather wood and make a crafting table"
+```
+
+This runs the full Mine0 planning loop — Cerebras/Gemma decomposes the objective into subtasks, the executor backend sends Minecraft actions, and outcomes feed back into the memory and verification layer. The Mineflayer backend is recommended for live demo reliability.
+
+---
+
+## JARVIS Persistent Backend
+
+The JARVIS backend connects Mine0's planner to a remote JARVIS-VLA model running on RunPod.
+
+- Cerebras/Gemma plans high-level subtasks (text only).
+- Each subtask is sent as a natural-language instruction to the persistent JARVIS worker.
+- JARVIS-VLA sees the live Minecraft POV frame and outputs low-level MineStudio button/camera actions.
+- The worker maintains a persistent Minecraft session across subgoals (no restart per subtask).
+
+**This path is integrated and runnable. Low-level VLA behavior is still experimental** — JARVIS can repeat actions or drift, which is a model behavior issue, not a Mine0 bug.
+
+### Prerequisites
+
+```bash
+# Cerebras API key
+export CEREBRAS_API_KEY="your_key_here"
+
+# SSH access to RunPod
+# ssh root@194.68.245.71 -p 22072 -i ~/.ssh/id_ed25519
+# Key must be loadable without a passphrase prompt (or loaded in ssh-agent).
+
+# vLLM server on RunPod must already be running.
+# Do NOT kill or restart it — startup takes ~10 minutes.
+```
+
+### Health check
+
+```bash
+npm run jarvis:worker -- health
+```
+
+### Start worker (only if not already running)
+
+```bash
+npm run jarvis:worker -- start
+```
+
+Check health first — `start` clobbers an existing session.
+
+### Run zombie combat demo
+
+```bash
+JARVIS_PERSISTENT_RESET_ON_START=1 \
+MINE0_MAX_DECISION_STEPS=3 \
+JARVIS_MAX_FRAMES=10 \
+npm run jarvis:persistent -- "Kill zombies. Look around to find a zombie, approach it, and attack with your sword."
+```
+
+| Variable | Value | Effect |
+|----------|-------|--------|
+| `JARVIS_PERSISTENT_RESET_ON_START` | `1` | Fresh Minecraft session; `0` reuses existing |
+| `MINE0_MAX_DECISION_STEPS` | `3` | High-level planner steps (subtask executions) |
+| `JARVIS_MAX_FRAMES` | `10` | Low-level frames per subgoal (~5–15 s game time) |
+
+### Expected log signals
+
+```
+planner         : cerebras / gemma-4-31b      ← Cerebras connected
+active subtask  : scan_for_zombie             ← combat decomposition active
+instruction     : "Look around for a zombie…" ← concrete instruction sent, not abstract token
+successCondition: { item: "zombie_defeated" } ← override active
+remoteExecutionSucceeded: true                ← worker stepped environment
+activeSubtask (step 2) → orient_to_zombie     ← scan-loop fix working
+```
+
+Full runbook → [docs/JARVIS_RUNBOOK.md](docs/JARVIS_RUNBOOK.md)
+
+---
+
+## Hackathon Demo Narrative
+
+For the live walkthrough, Mine0 demonstrates the full Cerebras/Gemma planning loop through a stable Minecraft execution backend. The same executor interface also supports our persistent JARVIS-VLA integration, where natural-language subtasks are sent to a remote visual-action model that sees the Minecraft POV and returns controls. This lets Mine0 separate reasoning, memory, verification, and embodied execution — swapping backends without touching the planner.
+
+---
+
+## What works
+
+- **Cerebras/Gemma planner** — live recursive task decomposition from free-form objectives.
+- **Recursive subtask decomposition** — zombie/combat objectives decompose into the correct 5-step sequence; no survival/crafting subtasks injected.
+- **Memory and verification loop** — outcomes feed back, stall detection fires, repeated failures halt the loop.
+- **Mineflayer control backend** — reliable Minecraft scripting for stable demo execution.
+- **JARVIS persistent worker** — SSH-based worker on RunPod with session reset/reuse.
+- **JARVIS execution artifacts** — session ID, cumulative steps, action logs, latest POV path.
+- **Scan-loop advancement** — live runs advance from `scan_for_zombie` → `orient_to_zombie` after repetitive-loop detection; the bug where `skipFailureHeuristics: true` blocked force-advance is fixed.
+
+## Known limitations
+
+- JARVIS-VLA low-level behavior can repeat the same button/camera action across frames — model behavior, not a Mine0 bug.
+- `latest_pov.png` file writes can lag; do not treat it as real-time evidence.
+- JARVIS backend is experimental; recommend the Mineflayer backend for reliable live demos.
+- Camera actions sometimes log `camera=221`, which exceeds the standard 0–120 MineStudio range; the environment steps without error but may contribute to camera drift.
+
+---
+
+## Executor interface
+
+```
+src/executor/
+  jarvis_persistent_executor.ts   ← JARVIS-VLA backend
+  jarvis_executor.ts              ← mock JARVIS (batch, for local tests)
+  mineflayer_executor.ts          ← Mineflayer scripting backend
+```
+
+All executors implement the same contract: receive a `SubgoalIntent`, return an `ActionOutcome`. The planner, memory, and verification layers are backend-agnostic.
+
+---
+
+## Web dashboard
 
 ```bash
 node --experimental-strip-types src/server.ts
 ```
 
-If `node` is not installed on your shell, use the bundled runtime:
+Shows live branch/output from the decision loop.
 
-```bash
-/Users/rhb/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --experimental-strip-types src/server.ts
-```
+---
 
-To use live Cerebras planning, create a local `.env` from `.env.example` and set `CEREBRAS_API_KEY`.
+## Suggested role split
 
-To use a live Mineflayer bot instead of the mock fallback, enable:
+- **Planner / reasoning** — `src/planner/`, `src/perception/`, `src/critic/`, prompt files.
+- **Executor / environment** — `src/executor/`, `src/verifier/`, `src/memory/`, environment adapters.
+- **Shared contracts** — `src/contracts/` (change intentionally).
 
-```bash
-MINE0_MINEFLAYER_ENABLED=1
-MINE0_MINEFLAYER_HOST=127.0.0.1
-MINE0_MINEFLAYER_PORT=25565
-MINE0_MINEFLAYER_USERNAME=Mine0Bot
-MINE0_MINEFLAYER_AUTH=offline
-```
+---
 
-Optional viewer:
+## Safety
 
-```bash
-MINE0_MINEFLAYER_VIEWER_ENABLED=1
-MINE0_MINEFLAYER_VIEWER_PORT=3007
-```
+- Never commit `.env`, `node_modules/`, `artifacts/demo/`, or `artifacts/videos/`.
+- Do not hide backend identity in logs — logs show the actual executor used.
+- Do not kill or restart the vLLM server on RunPod without explicit intent.
+- Do not push until tests pass (`npm run check`).
 
-Run one CLI cycle:
+---
 
-```bash
-node --experimental-strip-types src/cli.ts "Gather wood and make a crafting table"
-```
+## Current guardrail
 
-You can also force the backend explicitly:
+Mine0 runs in **single-proposal mode** to limit API usage: one planner proposal per step, first valid approach executed, no rollout/critic fan-out. This keeps Cerebras usage moderate while the full loop runs to completion.
 
-```bash
-node --experimental-strip-types src/cli.ts --executor=mineflayer "Gather wood and make a crafting table"
-```
-
-## Watching The Bot
-
-The easiest way to see what Mine0 is doing in-game is to join the same local Minecraft server yourself.
-
-1. Start the server in `C:\Users\dorot\dev\mc-server-1.8.8`.
-2. Open Minecraft Java Edition on version `1.8.8`.
-3. Add a multiplayer server or direct connect to `127.0.0.1:25565`.
-4. Run Mine0 with `--executor=mineflayer`.
-5. You will see the bot join as `Mine0Bot` and move around like another player.
-
-To join from another device on the same home network, use the host machine LAN IP instead of `127.0.0.1`.
-Current LAN IP on this machine: `10.0.0.3`
-
-Example:
-
-```text
-10.0.0.3:25565
-```
-
-Optional browser viewer:
-
-- Set `MINE0_MINEFLAYER_VIEWER_ENABLED=1` in `.env`.
-- This may require installing the `canvas` package separately on Windows before `prismarine-viewer` works reliably.
-
-## Enabling Cerebras
-
-Single-decision Cerebras planning is still supported.
-
-Add your key to `.env`:
-
-```bash
-CEREBRAS_API_KEY=your-real-key
-```
-
-Optional:
-
-```bash
-CEREBRAS_MODEL=gemma-4-31b
-CEREBRAS_FALLBACK_MODEL=gpt-oss-120b
-CEREBRAS_ENABLE_IMAGE_INPUT=1
-MINE0_SCREENSHOT_DIR=artifacts/frames
-```
-
-With that set, the app will use Cerebras for perception and the one allowed planner decision each cycle. Without the key, it falls back to the local heuristic planner.
-
-For actual JARVIS visual perception, also enable:
-
-```bash
-MINE0_MODEL_PERCEPTION_ENABLED=1
-CEREBRAS_ENABLE_IMAGE_INPUT=1
-```
-
-In the `jarvis-persistent` route, Mine0 now mirrors the latest worker screenshot into `artifacts/frames/jarvis-persistent/` and attaches that local frame to Gemma perception prompts when image input is enabled.
-Mineflayer does not use image input for Gemma perception and does not emit observation frames; it remains structured-state only.
-
-The run loop no longer stops after a tiny fixed budget. Instead, it keeps working until the objective is done or one of the stuck detectors fires. The safety controls are:
+Safety controls:
 
 ```bash
 MINE0_MAX_DECISION_STEPS=250
@@ -133,34 +200,13 @@ MINE0_MAX_STALLED_STEPS=6
 MINE0_MAX_REPEATED_ACTION_FAILURES=4
 ```
 
-This still keeps Cerebras usage moderate because each step only makes one perception call and one planner call.
+### JARVIS image perception (optional)
 
-Run the built-in checks:
+In the `jarvis-persistent` route, Mine0 can mirror the latest worker screenshot into `artifacts/frames/jarvis-persistent/` and attach it to Gemma perception prompts:
 
 ```bash
-node --experimental-strip-types --test tests/*.test.ts
+MINE0_MODEL_PERCEPTION_ENABLED=1
+CEREBRAS_ENABLE_IMAGE_INPUT=1
 ```
 
-## Suggested role split
-
-- Role 1 can stay mostly inside `src/planner/`, `src/perception/`, `src/critic/`, and prompt/schema files.
-- Role 2 can stay mostly inside `src/executor/`, `src/verifier/`, `src/memory/`, and environment adapters.
-- Shared contracts should change intentionally inside `src/contracts/`.
-
-## Notes
-
-- `jarvis` is still a mock executor.
-- `mineflayer` now supports a real local bot session when the Mineflayer environment variables are configured, and otherwise falls back to the mock world so tests and local exploration stay stable.
-- In live Mineflayer mode, the executor now stays connected across prompts instead of leaving the server after each objective. When a run finishes, it posts either `Completed: <prompt>` or `Failed (<reason>): <prompt>` in Minecraft chat.
-- Mineflayer craft failures now surface missing prerequisites in a structured way so the task stack can add prerequisite collection tasks before retrying a blocked craft.
-- When Gemma is enabled, task decomposition is now recursive at the active-head level: the current queue head can be decomposed into child subtasks, and blocked heads are refined into prerequisite child tasks under that node instead of flattening everything into one hardcoded route.
-- A memoized breakdown guard prevents the system from asking Gemma to decompose the exact same active head in the exact same world state repeatedly.
-- Backend choice is explicit per run. Mine0 does not auto-switch between Jarvis and Mineflayer mid-run, and it always executes the first selected planner approach.
-- The shared Gemma perception, task decomposition, task refinement, and task-stack logic now frame prompts for the active route so Jarvis planning stays Jarvis-oriented and Mineflayer behavior stays unchanged.
-- The planner reads `CEREBRAS_API_KEY`, `CEREBRAS_MODEL`, and `CEREBRAS_FALLBACK_MODEL` from the environment. If no API key is set, the app falls back to heuristic planner-side behavior.
-- Without an API key, Mine0 still falls back to heuristic task-stack behavior, but Gemma is now the primary source of recursive prerequisite naming and subtask breakdown when available.
-- If `MINE0_SCREENSHOT_DIR` contains `.png`, `.jpg`, `.jpeg`, or `.webp` frames, the mock executor will use those files as the screenshot input in lexicographic order instead of the placeholder frame.
-- `CEREBRAS_ENABLE_IMAGE_INPUT=1` will attach those screenshots to the Cerebras perception prompt.
-- Jarvis can still attach screenshots when image perception is enabled, but Mineflayer now skips frame capture entirely.
-- Even when `mode` is set to `multiverse`, the current implementation intentionally executes only the first planner proposal and skips rollout/critic fan-out to keep API usage down.
-- The prompt-box dashboard shows the single selected branch and keeps the trace shape compatible with future expansion.
+Mineflayer does not use image input for Gemma perception; it remains structured-state only.

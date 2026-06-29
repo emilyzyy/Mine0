@@ -2,6 +2,8 @@ artifacts/logs/*.json
 artifacts/logs/*.jsonl
 artifacts/replays/*.json
 artifacts/frames/*.png
+artifacts/demo/
+artifacts/videos/
 .DS_Store
 .env
 node_modules/
