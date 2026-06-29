@@ -1,5 +1,13 @@
 # Mine0 Project Plan
 
+## Temporary Implementation Guardrail
+
+Until API-usage limits are loosened, the live codebase should stay in `single-decision mode`.
+
+- Generate one planner proposal per cycle.
+- Take the first valid approach instead of running parallel planner branches.
+- Skip rollout and critic fan-out in the live execution path for now.
+
 ## Working Title
 
 **MineZero / Mine0**: a Cerebras-powered multiverse planner that learns to play Minecraft by imagining several possible futures before acting.

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Mine0 Phase 0 scaffold: typed contracts, mocked planning loop, and prompt-box entrypoint.",
+  "description": "Mine0 scaffold: typed contracts, multiverse planning loop, and a live-or-mock Mineflayer executor.",
   "scripts": {
     "check": "node --experimental-strip-types --test tests/*.test.ts",
     "start": "node --experimental-strip-types src/server.ts",
@@ -16,5 +16,10 @@
   "devDependencies": {
     "@types/node": "^26.0.1",
     "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "mineflayer": "^4.37.1",
+    "mineflayer-pathfinder": "^2.4.5",
+    "prismarine-viewer": "^1.33.0"
   }
 }

@@ -162,7 +162,7 @@ export class CerebrasClient {
     let lastError: string | null = null;
 
     for (let index = 0; index < preferredModels.length; index += 1) {
-      const model = preferredModels[index];
+      const model = preferredModels[index] ?? this.config.model;
       const startedAt = Date.now();
 
       try {

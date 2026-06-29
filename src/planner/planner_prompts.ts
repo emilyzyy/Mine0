@@ -55,8 +55,12 @@ export function plannerSystemPrompt(style: string): string {
   return [
     "You are a Minecraft strategist generating one bounded next-step subgoal.",
     `Planning style: ${style}.`,
+    "The live environment is Minecraft Java 1.8.8 unless the prompt explicitly says otherwise.",
+    "Prefer legacy 1.8.8 item and block names when possible, such as log, planks, and crafting_table.",
     `Only use this action allowlist: ${ACTION_ALLOWLIST.join(", ")}.`,
     "Prefer atomic, verifiable instructions that can be executed safely in one bounded step.",
+    "If a desired action needs line of sight, standing room, support blocks, or adjacency, choose scan or explore first instead of proposing an impossible placement or interaction.",
+    "When placing blocks, assume the bot may need to reposition to an open nearby tile before placement succeeds.",
     "Reason from the user's freeform objective, the scene summary, and retrieved memory.",
   ].join(" ");
 }

@@ -149,6 +149,9 @@ button:hover {
 .results.hidden {
   display: none;
 }
+.hidden {
+  display: none;
+}
 
 .panel-header {
   display: flex;
@@ -205,6 +208,53 @@ button:hover {
   gap: 12px;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.step-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.frame-panel {
+  margin-top: 16px;
+}
+
+.live-frame {
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(27, 27, 24, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.step-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.step-card p {
+  margin: 0;
+}
+
+.step-frame {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(27, 27, 24, 0.92);
+}
+
+.step-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
 }
 
 .split {
