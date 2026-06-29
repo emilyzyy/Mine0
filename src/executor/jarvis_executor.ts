@@ -9,9 +9,8 @@ export class JarvisExecutor implements ExecutorBackend {
   private readonly world = new MockMinecraftWorld("jarvis");
 
   async observe(userObjective: string): Promise<ExecutorObservation> {
-    const screenshotPath = await this.world.captureFrame();
     return {
-      worldState: parseWorldState(this.world.snapshot(userObjective, null, screenshotPath)),
+      worldState: parseWorldState(this.world.snapshot(userObjective, null)),
     };
   }
 

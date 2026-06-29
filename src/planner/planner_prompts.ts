@@ -7,6 +7,7 @@ export const ACTION_ALLOWLIST = [
   "explore",
   "collect",
   "craft",
+  "smelt",
   "equip",
   "place",
 ] as const;
@@ -14,29 +15,29 @@ export const ACTION_ALLOWLIST = [
 export function worldStatePrompt(worldState: WorldState): string {
   return JSON.stringify(
     {
-      timestamp: worldState.timestamp,
       objective: worldState.userObjective,
       position: worldState.position,
-      biomeOrRegionHint: worldState.biomeOrRegionHint,
+      region: worldState.biomeOrRegionHint,
       health: worldState.health,
       hunger: worldState.hunger,
       inventory: worldState.inventory,
-      equippedItem: worldState.equippedItem,
-      timeOfDay: worldState.timeOfDay,
-      visibleHazards: worldState.visibleHazards,
-      perceivedResources: worldState.perceivedResources,
-      goalProgress: worldState.goalProgress,
-      screenshotPath: worldState.screenshotPath,
+      equipped: worldState.equippedItem,
+      hazards: worldState.visibleHazards.slice(0, 5),
+      resources: worldState.perceivedResources.slice(0, 8),
+      blocks: worldState.nearbyBlocks.slice(0, 12),
+      entities: worldState.nearbyEntities.slice(0, 6),
+      sight: worldState.lineOfSightTarget,
+      hints: worldState.interactionHints.slice(0, 16),
+      progress: worldState.goalProgress,
     },
-    null,
-    2,
   );
 }
 
 export function perceptionSystemPrompt(): string {
   return [
     "You are the perception stage of a Minecraft planning system.",
-    "Infer a compact scene model for planning from limited state and, when available, a screenshot.",
+    "Infer a compact scene model for planning from Mineflayer-native structured state only.",
+    "Prioritize the structured Mineflayer signals such as nearby blocks, nearby entities, line of sight, and interaction hints.",
     "Do not invent exact block coordinates or a complete nearby block list.",
     "Return concise structured planning cues only.",
   ].join(" ");
@@ -45,7 +46,7 @@ export function perceptionSystemPrompt(): string {
 export function perceptionUserPrompt(worldState: WorldState): string {
   return [
     "Produce a scene model for the current Minecraft step.",
-    "If the screenshot is not informative, rely on the provided structured state and say so in confidence notes.",
+    "Treat the inventory as the bot's full current inventory, including any items it may have already had when it joined the server.",
     "",
     worldStatePrompt(worldState),
   ].join("\n");
@@ -53,34 +54,56 @@ export function perceptionUserPrompt(worldState: WorldState): string {
 
 export function plannerSystemPrompt(style: string): string {
   return [
-    "You are a Minecraft strategist generating one bounded next-step subgoal.",
-    `Planning style: ${style}.`,
-    "The live environment is Minecraft Java 1.8.8 unless the prompt explicitly says otherwise.",
-    "Prefer legacy 1.8.8 item and block names when possible, such as log, planks, and crafting_table.",
+    `You choose one bounded Minecraft Java 1.8.8 action (${style}).`,
     `Only use this action allowlist: ${ACTION_ALLOWLIST.join(", ")}.`,
-    "Prefer atomic, verifiable instructions that can be executed safely in one bounded step.",
-    "If a desired action needs line of sight, standing room, support blocks, or adjacency, choose scan or explore first instead of proposing an impossible placement or interaction.",
-    "When placing blocks, assume the bot may need to reposition to an open nearby tile before placement succeeds.",
-    "Reason from the user's freeform objective, the scene summary, and retrieved memory.",
+    "Follow the active task-stack head; skip work already satisfied by authoritative inventory/state.",
+    "Return one atomic, verifiable action using Mineflayer blocks, entities, sight, and interaction hints as truth.",
+    "Use recent positions/actions to detect loops. For search, name a useful frontier direction; change direction or depth after revisits, and descend for unseen underground targets.",
+    "Respect access requirements such as line of sight, adjacency, support, standing room, and placed workstations; reposition or clear space when blocked.",
+    "Use legacy item names. Place carried workstations before workstation-dependent crafts. Prefer nearby or underfoot for floor placement.",
   ].join(" ");
+}
+
+function compactPerception(perception: PerceptionResult): string {
+  return JSON.stringify({
+    scene: perception.sceneSummary,
+    resources: perception.visibleResources.slice(0, 6),
+    terrain: perception.terrainAffordances.slice(0, 6),
+    hazards: perception.hazards.slice(0, 4),
+    reachable: perception.reachableTargets.slice(0, 6),
+  });
+}
+
+function selectPlannerMemories(memorySummary: string[]): string[] {
+  const diagnostics = memorySummary.filter((entry) =>
+    entry.includes("issue_tags=") || entry.includes("suggested_fix="),
+  );
+  const selected = [...diagnostics.slice(-3), ...memorySummary.slice(-2)];
+  return [...new Set(selected)].slice(-4);
 }
 
 export function plannerUserPrompt(
   worldState: WorldState,
   perception: PerceptionResult,
   memorySummary: string[],
+  recentHistorySummary: string[],
+  taskContext: import("./task_stack_service.ts").TaskPlanningContext | null = null,
 ): string {
+  const pending = (taskContext?.pendingSubtasks ?? []).slice(0, 6).map((entry) => entry.description);
+  const completed = (taskContext?.completedSubtasks ?? []).slice(-4).map((entry) => entry.description);
   return [
-    "Generate exactly one planner proposal.",
-    "",
-    "World state:",
+    "Generate exactly one proposal. Advance the active task or its immediate blocker. Use issues/history to avoid failed or stagnant repeats unless state changed.",
+    `Root: ${taskContext?.rootObjective ?? worldState.userObjective}`,
+    `Active: ${taskContext?.activeSubtask?.description ?? worldState.userObjective}`,
+    `Focus: ${taskContext?.activeSubtask?.planningFocus ?? worldState.userObjective}`,
+    `Queue: ${pending.join(" > ") || "none"}`,
+    `Completed: ${completed.join("; ") || "none"}`,
+    "World:",
     worldStatePrompt(worldState),
-    "",
     "Perception:",
-    JSON.stringify(perception, null, 2),
-    "",
-    "Retrieved memory:",
-    JSON.stringify(memorySummary, null, 2),
+    compactPerception(perception),
+    `Relevant memory/issues: ${JSON.stringify(selectPlannerMemories(memorySummary))}`,
+    `Recent run history: ${JSON.stringify(recentHistorySummary.slice(-4))}`,
   ].join("\n");
 }
 
@@ -101,15 +124,12 @@ export function rolloutUserPrompt(
 ): string {
   return [
     `Generate ${variantCount} imagined futures for this proposal.`,
-    "",
-    "World state:",
+    "World:",
     worldStatePrompt(worldState),
-    "",
     "Perception:",
-    JSON.stringify(perception, null, 2),
-    "",
+    compactPerception(perception),
     "Proposal:",
-    JSON.stringify(proposal, null, 2),
+    JSON.stringify(proposal),
   ].join("\n");
 }
 
@@ -129,14 +149,10 @@ export function criticUserPrompt(
 ): string {
   return [
     "Evaluate the following imagined futures.",
-    "",
-    "World state:",
+    "World:",
     worldStatePrompt(worldState),
-    "",
-    "Retrieved memory:",
-    JSON.stringify(memorySummary, null, 2),
-    "",
+    `Relevant memory/issues: ${JSON.stringify(selectPlannerMemories(memorySummary))}`,
     "Futures:",
-    JSON.stringify(futures, null, 2),
+    JSON.stringify(futures),
   ].join("\n");
 }

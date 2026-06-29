@@ -17,8 +17,11 @@ test("parseWorldState accepts the canonical scaffold shape", () => {
     sceneSummary: null,
     visibleHazards: [],
     perceivedResources: ["oak_tree"],
+    nearbyBlocks: ["grass", "log"],
+    nearbyEntities: [],
+    lineOfSightTarget: "oak_tree",
+    interactionHints: ["tree_visible", "structured_perception_only"],
     goalProgress: 0.1,
-    screenshotPath: "artifacts/frames/step_001.png",
   });
 
   assert.equal(worldState.position.y, 64);

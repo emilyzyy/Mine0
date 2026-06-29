@@ -48,7 +48,16 @@
         <div class="frame-panel">
           <img id="live-frame" class="live-frame hidden" alt="Live first-person bot view" />
         </div>
-        <div id="live-steps" class="step-list"></div>
+        <div class="live-workspace">
+          <div id="live-steps" class="step-list"></div>
+          <aside class="task-tree-panel" aria-label="Live task tree">
+            <div class="task-tree-heading">
+              <p class="eyebrow">Objective map</p>
+              <h2>Task Tree</h2>
+            </div>
+            <div id="live-task-tree" class="task-tree-empty">Waiting for the task stack...</div>
+          </aside>
+        </div>
       </section>
 
       <section id="results" class="results hidden">

@@ -7,10 +7,12 @@ import type {
   WorldState,
 } from "../contracts/index.ts";
 import type { ProviderCallMeta } from "../planner/cerebras_client.ts";
+import type { TaskPlanningContext } from "../planner/task_stack_service.ts";
 import type { VerificationResult } from "../verifier/verification_service.ts";
 
 export interface DecisionStepTrace {
   stepNumber: number;
+  taskContext: TaskPlanningContext;
   worldState: WorldState;
   perception: {
     sceneSummary: string;

@@ -12,10 +12,51 @@ const liveRun = document.getElementById("live-run");
 const liveChip = document.getElementById("live-chip");
 const liveSummary = document.getElementById("live-summary");
 const liveSteps = document.getElementById("live-steps");
+const liveTaskTree = document.getElementById("live-task-tree");
 const liveFrame = document.getElementById("live-frame");
 const selectedFrame = document.getElementById("selected-frame");
 
 let livePollTimer = null;
+
+function formatInventory(inventory) {
+  if (!Array.isArray(inventory) || inventory.length === 0) {
+    return "[]";
+  }
+
+  return inventory
+    .map((stack) => `${stack.item} x${stack.count}`)
+    .join(", ");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderTaskNode(node, currentAction, depth = 0) {
+  if (!node) return "";
+  const isRoot = depth === 0;
+  const isActive = node.status === "active";
+  const children = Array.isArray(node.children) ? node.children : [];
+  const label = isRoot ? `Main goal: ${node.description}` : node.description;
+  return `
+    <li class="task-node task-node-${node.status} ${isRoot ? "task-node-root" : ""}">
+      <div class="task-node-card">
+        <span class="task-node-marker" aria-hidden="true"></span>
+        <div>
+          <div class="task-node-label">${escapeHtml(label)}</div>
+          ${isActive && currentAction ? `<div class="task-current-action">CURRENT ACTION &rarr; ${escapeHtml(currentAction)}</div>` : ""}
+        </div>
+        <span class="task-status">${isActive ? "current" : node.status}</span>
+      </div>
+      ${children.length ? `<ul>${children.map((child) => renderTaskNode(child, currentAction, depth + 1)).join("")}</ul>` : ""}
+    </li>
+  `;
+}
 
 function setStatus(message, state = "idle") {
   status.textContent = message;
@@ -134,6 +175,11 @@ function renderLiveRun(runState) {
     runState.latestStep?.worldState?.screenshotPath ||
     runState.steps.at(-1)?.worldState?.screenshotPath ||
     "";
+  const latestInventory = runState.latestStep?.worldState?.inventory || runState.steps.at(-1)?.worldState?.inventory || [];
+  const taskContext = runState.latestStep?.taskContext || runState.steps.at(-1)?.taskContext;
+  const pendingTasks = taskContext?.pendingSubtasks || [];
+  const completedTasks = taskContext?.completedSubtasks || [];
+  const currentAction = runState.latestStep?.selectedIntent?.instruction || "";
   liveSummary.innerHTML = `
     <h3>${runState.objective || "No active objective"}</h3>
     <p><strong>Executor:</strong> ${runState.executorKind || "n/a"}</p>
@@ -142,7 +188,17 @@ function renderLiveRun(runState) {
     <p><strong>Stop reason:</strong> ${runState.stopReason || (runState.running ? "still running" : "n/a")}</p>
     <p><strong>Error:</strong> ${runState.error || "none"}</p>
     <p><strong>Latest POV frame:</strong> ${latestScreenshotPath || "not available yet"}</p>
+    <p><strong>Current inventory:</strong> ${formatInventory(latestInventory)}</p>
+    <div class="task-stack">
+      <p><strong>Active subtask:</strong> ${taskContext?.activeSubtask?.description || (runState.running ? "reconciling..." : "none")}</p>
+      <p><strong>Planning focus:</strong> ${taskContext?.activeSubtask?.planningFocus || "none"}</p>
+      <p><strong>Queued:</strong> ${pendingTasks.map((task, index) => `${index + 1}. ${task.description}`).join(" → ") || "none"}</p>
+      <p><strong>Completed:</strong> ${completedTasks.map((task) => task.description).join(" · ") || "none"}</p>
+    </div>
   `;
+  liveTaskTree.innerHTML = taskContext?.taskTree
+    ? `<ul class="task-tree-root">${renderTaskNode(taskContext.taskTree, currentAction)}</ul>`
+    : `<p class="task-tree-empty">${runState.running ? "Reconciling the task tree..." : "No task tree available."}</p>`;
   renderFrame(liveFrame, latestScreenshotPath);
 
   liveSteps.innerHTML = runState.steps.length
@@ -155,12 +211,15 @@ function renderLiveRun(runState) {
                 <span>${step.selectedIntent.candidateAction.name}</span>
               </div>
               <p><strong>Objective:</strong> ${step.selectedIntent.objective}</p>
+              <p><strong>Active subtask:</strong> ${step.taskContext?.activeSubtask?.description || "none"}</p>
+              <p><strong>Pending stack:</strong> ${(step.taskContext?.pendingSubtasks || []).map((task) => task.description).join(" → ") || "none"}</p>
               <p><strong>Instruction:</strong> ${step.selectedIntent.instruction}</p>
               <p><strong>Strategy:</strong> ${step.plannedFuture.strategy}</p>
               <p><strong>Next step rationale:</strong> ${step.selectedIntent.candidateAction.reason}</p>
               <p><strong>Outcome:</strong> ${step.actionOutcome.status}${step.actionOutcome.failureReason ? ` · ${step.actionOutcome.failureReason}` : ""}</p>
               <p><strong>Position delta:</strong> ${JSON.stringify(step.actionOutcome.positionDelta)}</p>
               <p><strong>Inventory delta:</strong> ${JSON.stringify(step.actionOutcome.inventoryDelta)}</p>
+              <p><strong>Full inventory:</strong> ${formatInventory(step.worldState?.inventory)}</p>
               ${step.worldState?.screenshotPath ? `<img class="step-frame" alt="Step ${step.stepNumber} first-person view" src="${frameUrlFor(step.worldState.screenshotPath)}" />` : ""}
             </article>
           `,

@@ -85,7 +85,7 @@ export class RolloutService {
               ),
             },
           ],
-          maxOutputTokens: 1200,
+          maxOutputTokens: 700,
           temperature: 0.25,
         }),
       ),
@@ -156,7 +156,7 @@ export class RolloutService {
           },
           {
             action: "verify resulting observation",
-            expectedResult: "New screenshot and state should reflect the predicted change.",
+            expectedResult: "New state should reflect the predicted change.",
           },
         ],
         successProbability,

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { ActionOutcome, MemoryEntry, PredictedFuture, WorldState } from "../contracts/index.ts";
+import type { VerificationResult } from "../verifier/verification_service.ts";
 import { parseMemoryEntry } from "../contracts/index.ts";
 import { makeId } from "../shared/ids.ts";
 import { appendJsonLine, isoNow } from "../shared/logger.ts";
@@ -61,7 +62,7 @@ export class MemoryService {
     worldState: WorldState,
     predictedFuture: PredictedFuture,
     actualOutcome: ActionOutcome,
-    predictionError: number,
+    verification: VerificationResult,
   ): Promise<MemoryEntry> {
     await this.ready;
     const entry: MemoryEntry = {
@@ -72,7 +73,9 @@ export class MemoryService {
       failureType: actualOutcome.failureReason,
       hazardContext: [...worldState.visibleHazards],
       resourceContext: [...worldState.perceivedResources],
-      predictionError,
+      issueTags: [...verification.issueTags],
+      suggestedFixes: [...verification.suggestedFixes],
+      predictionError: verification.predictionError,
       predictedFuture,
       actualOutcome,
       createdAt: isoNow(),
@@ -83,13 +86,17 @@ export class MemoryService {
     return entry;
   }
 
-  async retrieve(worldState: WorldState): Promise<MemoryQueryResult> {
+  async retrieve(worldState: WorldState, recentHistory: string[] = []): Promise<MemoryQueryResult> {
     await this.ready;
     const objectiveTerms = worldState.userObjective.toLowerCase().split(/\s+/).filter(Boolean);
+    const historyTerms = recentHistory
+      .flatMap((entry) => entry.toLowerCase().split(/[^a-z0-9_]+/))
+      .filter((term) => term.length >= 3);
+    const searchTerms = new Set([...objectiveTerms, ...historyTerms]);
     const entries = this.entries
       .filter((entry) => {
         const objective = entry.objective.toLowerCase();
-        return objectiveTerms.some((term) => objective.includes(term));
+        return [...searchTerms].some((term) => objective.includes(term));
       })
       .slice(-5)
       .reverse();
@@ -101,7 +108,13 @@ export class MemoryService {
           : entry.actualOutcome.status === "success"
             ? "worked"
             : `degraded with ${entry.actualOutcome.status}`;
-      return `${entry.actionType} previously ${verdict} in ${entry.predictedFuture.strategy}`;
+      const issueText = entry.issueTags.length > 0
+        ? ` issue_tags=${entry.issueTags.join(",")}.`
+        : "";
+      const fixText = entry.suggestedFixes[0]
+        ? ` suggested_fix=${entry.suggestedFixes[0]}`
+        : "";
+      return `${entry.actionType} previously ${verdict} in ${entry.predictedFuture.strategy}.${issueText}${fixText}`;
     });
 
     return { entries, summary };

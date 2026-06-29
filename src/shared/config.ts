@@ -31,6 +31,7 @@ export interface PlannerConfig {
   maxStalledSteps: number;
   maxRepeatedActionFailures: number;
   imageInputEnabled: boolean;
+  modelPerceptionEnabled: boolean;
   screenshotDirectory: string;
   mineflayer: {
     enabled: boolean;
@@ -75,6 +76,7 @@ export function loadPlannerConfig(): PlannerConfig {
       Math.min(12, readNumber(process.env.MINE0_MAX_REPEATED_ACTION_FAILURES, 4)),
     ),
     imageInputEnabled: readBoolean(process.env.CEREBRAS_ENABLE_IMAGE_INPUT, false),
+    modelPerceptionEnabled: readBoolean(process.env.MINE0_MODEL_PERCEPTION_ENABLED, false),
     screenshotDirectory:
       process.env.MINE0_SCREENSHOT_DIR?.trim() || "sample_data/minecraft_frames",
     mineflayer: {

@@ -7,6 +7,7 @@ Until API-usage limits are loosened, the live codebase should stay in `single-de
 - Generate one planner proposal per cycle.
 - Take the first valid approach instead of running parallel planner branches.
 - Skip rollout and critic fan-out in the live execution path for now.
+- Keep perception structured and Mineflayer-native; do not reintroduce screenshots as planner input.
 
 ## Working Title
 
@@ -48,22 +49,19 @@ Use a fixed seed with nearby trees and exposed stone. The compelling part is not
 
 At every decision step, Mine0 should:
 
-1. capture a first-person Minecraft screenshot
-2. collect limited structured state
-3. run perception to turn the screenshot into a structured scene description
-4. retrieve relevant memories
-5. generate several competing plans
-6. roll out several predicted futures concurrently
-7. score futures with a critic
-8. execute only the first action from the best future
-9. verify the actual outcome against the predicted one
-10. store the experience and replan
+1. collect limited structured state from the active Minecraft backend
+2. run perception to turn structured signals into a compact scene description
+3. retrieve relevant memories
+4. generate a single bounded plan in single-decision mode
+5. execute the first valid action from that plan
+6. verify the actual outcome against the predicted one
+7. store the experience and replan
 
 This is an online planning loop with in-context adaptation through memory, not gradient-based learning.
 
 ## Design Principles
 
-- Vision must matter. Do not give the planner a perfect list of nearby blocks if the screenshot is supposed to drive scene understanding.
+- Structured perception must matter. Do not give the planner a perfect list of nearby blocks if limited state is supposed to drive scene understanding.
 - Planning outputs must be structured JSON, not vague prose.
 - Execution must be bounded and verifiable.
 - Memory should influence future decisions through retrieval, not weight updates.
@@ -113,7 +111,7 @@ Mineflayer already supports:
 - block placement
 - combat and interaction
 
-Use `prismarine-viewer` to render the first-person image for Gemma.
+Use Mineflayer-native structured perception for Gemma rather than image input.
 
 In this fallback mode, Gemma can still reason from the user's freeform prompt, but the executor may need to translate the chosen intent into a smaller set of validated skills such as:
 
@@ -134,7 +132,7 @@ This mode resembles Voyager’s idea of an LLM operating Minecraft through high-
 
 ## Recommended Phase 1 Choice
 
-Start with **JARVIS-VLA as the intended primary backend** and keep **Mineflayer + prismarine-viewer** ready as the contingency path if JARVIS integration cannot be stabilized quickly enough.
+Start with **JARVIS-VLA as the intended primary backend** and keep **Mineflayer + structured perception** ready as the contingency path if JARVIS integration cannot be stabilized quickly enough.
 
 Recommended sequencing:
 
@@ -153,7 +151,6 @@ The architecture is intentionally split into two roles with a small shared inter
 
 Input:
 
-- Minecraft screenshot
 - structured state
 - user prompt / objective
 - retrieved memories
@@ -178,7 +175,7 @@ Responsibilities:
 
 Pipeline:
 
-`Screenshot + WorldState + UserObjective + Memory -> Perception -> Competing Plans -> Imagined Futures -> Critic -> Selected Instruction`
+`WorldState + UserObjective + Memory -> Perception -> Selected Instruction`
 
 Example output:
 
@@ -207,7 +204,7 @@ Output:
 Responsibilities:
 
 - run Minecraft environment
-- capture screenshots and state
+- collect structured state
 - execute the selected action
 - enforce action limits and safety conditions
 - detect task success, timeout, or failure
@@ -218,7 +215,7 @@ Responsibilities:
 
 Pipeline:
 
-`Selected Instruction -> Execution -> New Screenshot + State -> Verification -> Memory Update`
+`Selected Instruction -> Execution -> New State -> Verification -> Memory Update`
 
 ### Shared Interface
 
@@ -257,8 +254,7 @@ The core pipeline should be:
   "time_of_day": "day",
   "scene_summary": null,
   "visible_hazards": [],
-  "goal_progress": 0.1,
-  "screenshot_path": "artifacts/frames/step_001.png"
+  "goal_progress": 0.1
 }
 ```
 
@@ -272,7 +268,7 @@ Suggested fields:
 - coarse progress toward objective
 - perceived resources
 - hazards
-- screenshot reference
+- structured nearby-block and interaction cues
 
 Do not expose a perfect machine-readable list of all nearby blocks to the planner.
 
@@ -369,7 +365,7 @@ Minimum required fields:
 
 ## Perception
 
-The perception stage should convert the screenshot into a compact scene model suitable for planning.
+The perception stage should convert structured Mineflayer signals into a compact scene model suitable for planning.
 
 Expected outputs:
 
@@ -393,21 +389,17 @@ This scene model should be merged into `WorldState.scene_summary`.
 
 ### Planner Stage
 
-Use 3 planner agents to propose distinct high-level strategies for the current state and user prompt. Examples:
+In single-decision mode, propose one bounded next step for the current state and user prompt. Examples:
 
 - gather wood immediately
 - move toward exposed stone first if already enough wood exists
 - reposition to a safer or more reachable location before collecting
 
-Validate and deduplicate their proposed actions before rollouts.
-
 ### Rollout Stage
 
-For each valid candidate, run 4 to 6 imagined futures concurrently at first.
+Rollout fan-out is disabled in the live path for now.
 
-Do not start with 10 branches on day one. Measure token use and latency first, then increase branch count later if budgets allow.
-
-Each rollout should predict:
+Each selected step should still predict:
 
 - likely state changes
 - success probability
@@ -458,13 +450,13 @@ Use code to verify:
 - whether the executor reported success
 - whether the expected item now exists
 
-### Vision-Assisted Verification
+### Structured Verification
 
-Use Gemma or another visual verifier to judge:
+Use structured Mineflayer state to judge:
 
 - whether terrain changed as expected
 - whether a hazard is still present
-- whether the bot reached the visually intended location
+- whether the bot reached the intended location
 - whether the final scene matches the predicted result
 
 This avoids one LLM merely agreeing with another LLM and gives genuine prediction-error measurement.
@@ -514,18 +506,14 @@ When execution fails:
 
 The implementation target should follow this loop:
 
-1. capture screenshot and structured state
+1. collect structured state
 2. run perception to produce a scene model
 3. retrieve relevant past experiences
-4. run 3 planner agents to propose distinct strategies
-5. validate and deduplicate actions
-6. run 4 to 6 future rollouts concurrently
-7. score them with the critic
-8. execute only the first action of the winning future
-9. capture resulting screenshot and state
-10. compare prediction against reality
-11. store the experience
-12. replan
+4. propose one bounded strategy
+5. execute the selected action
+6. compare prediction against reality
+7. store the experience
+8. replan
 13. stop on success or failure condition
 
 ## Dashboard Requirements
@@ -622,8 +610,8 @@ Build:
 
 - executor interface for bounded atomic instructions
 - JARVIS-VLA backend attempt
-- screenshot capture and state extraction
-- Mineflayer fallback backend with prismarine-viewer
+- structured state extraction
+- Mineflayer fallback backend with structured perception
 - bounded action execution
 
 Success criteria:
@@ -642,7 +630,7 @@ Build:
 
 Success criteria:
 
-- one decision cycle runs from screenshot to selected action
+- one decision cycle runs from structured state to selected action
 
 ### Phase 3: Verification and Memory
 
@@ -691,7 +679,7 @@ Success criteria:
 Mitigation:
 
 - do not give the planner exact nearby block lists
-- rely on screenshot plus limited state for semantic target selection
+- rely on structured state plus limited perception cues for semantic target selection
 
 ### Risk: Action hallucination
 
@@ -742,7 +730,7 @@ The next concrete build target should be:
 3. build a pluggable executor interface
 4. attempt the JARVIS execution backend first
 5. implement the Mineflayer fallback backend
-6. add screenshot capture and state extraction
+6. add structured state extraction
 7. wire one full planning loop with mocked Cerebras outputs
 8. replace mocks with real perception, planning, rollout, and critic calls
 9. add verification and memory

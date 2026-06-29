@@ -32,8 +32,11 @@ function minimalWorldState(userObjective: string): WorldState {
     sceneSummary: null,
     visibleHazards: [],
     perceivedResources: [],
+    nearbyBlocks: [],
+    nearbyEntities: [],
+    lineOfSightTarget: null,
+    interactionHints: ["structured_perception_only"],
     goalProgress: 0,
-    screenshotPath: "artifacts/frames/test.png",
   };
 }
 
@@ -68,6 +71,8 @@ function minimalMemoryEntryJson(id: string, objective = "gather wood"): Record<s
     failureType: null,
     hazardContext: [],
     resourceContext: ["oak_tree"],
+    issueTags: ["progress_observed"],
+    suggestedFixes: ["continue from the updated state."],
     predictionError: 0,
     predictedFuture: {
       branchId: "branch_test_001",
@@ -175,4 +180,21 @@ test("duplicate IDs in the log file are not loaded twice", async () => {
   const result = await service.retrieve(minimalWorldState("gather wood"));
   const matchingIds = result.entries.filter((e) => e.id === "memory_dedup_001");
   assert.equal(matchingIds.length, 1, "duplicate entry should appear only once");
+});
+
+test("retrieve() summaries include issue diagnostics and suggested fixes", async () => {
+  const logFile = `test_issue_summary_${Date.now()}.jsonl`;
+  USED_FILES.push(logFile);
+  await ensureProjectDirectories();
+
+  const entry = minimalMemoryEntryJson("memory_issue_001", "place furnace");
+  entry.issueTags = ["placement_access_problem"];
+  entry.suggestedFixes = ["change stance or clear space before retrying placement."];
+  await appendJsonLine(logFile, entry);
+
+  const service = new MemoryService(logFile);
+  const result = await service.retrieve(minimalWorldState("place furnace"));
+
+  assert.ok(result.summary.some((line) => line.includes("issue_tags=placement_access_problem")));
+  assert.ok(result.summary.some((line) => line.includes("suggested_fix=change stance or clear space before retrying placement.")));
 });

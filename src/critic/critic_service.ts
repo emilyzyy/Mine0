@@ -54,7 +54,7 @@ export class CriticService {
             content: criticUserPrompt(worldState, memorySummary, futures),
           },
         ],
-        maxOutputTokens: 900,
+        maxOutputTokens: 600,
         temperature: 0.1,
       });
 

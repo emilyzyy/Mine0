@@ -1,6 +1,4 @@
-import { readFile } from "node:fs/promises";
 import { loadPlannerConfig, type PlannerConfig } from "../shared/config.ts";
-import { projectPath } from "../shared/fs.ts";
 
 export interface ProviderUsage {
   promptTokens: number;
@@ -26,14 +24,7 @@ interface TextContentPart {
   text: string;
 }
 
-interface ImageContentPart {
-  type: "image_url";
-  image_url: {
-    url: string;
-  };
-}
-
-type MessageContent = string | Array<TextContentPart | ImageContentPart>;
+type MessageContent = string | Array<TextContentPart>;
 
 interface ChatMessage {
   role: ChatRole;
@@ -78,46 +69,6 @@ function extractTextContent(content: unknown): string {
   return "";
 }
 
-async function maybeAttachImage(
-  screenshotPath: string,
-  text: string,
-  enabled: boolean,
-  screenshotDirectory: string,
-): Promise<MessageContent> {
-  const allowedRoot = projectPath(screenshotDirectory);
-  if (!enabled || !screenshotPath.startsWith(allowedRoot)) {
-    return text;
-  }
-
-  try {
-    const file = await readFile(screenshotPath);
-    const base64 = file.toString("base64");
-    const mimeType = inferImageMimeType(screenshotPath);
-    return [
-      { type: "text", text },
-      {
-        type: "image_url",
-        image_url: {
-          url: `data:${mimeType};base64,${base64}`,
-        },
-      },
-    ];
-  } catch {
-    return text;
-  }
-}
-
-function inferImageMimeType(screenshotPath: string): string {
-  const normalized = screenshotPath.toLowerCase();
-  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) {
-    return "image/jpeg";
-  }
-  if (normalized.endsWith(".webp")) {
-    return "image/webp";
-  }
-  return "image/png";
-}
-
 export class CerebrasClient {
   readonly config: PlannerConfig;
 
@@ -125,13 +76,8 @@ export class CerebrasClient {
     this.config = config;
   }
 
-  async buildUserContent(text: string, screenshotPath: string): Promise<MessageContent> {
-    return maybeAttachImage(
-      screenshotPath,
-      text,
-      this.config.imageInputEnabled,
-      this.config.screenshotDirectory,
-    );
+  async buildUserContent(text: string): Promise<MessageContent> {
+    return text;
   }
 
   async requestStructured<T>(request: StructuredRequest): Promise<StructuredResponse<T>> {

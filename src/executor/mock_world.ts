@@ -1,4 +1,5 @@
 import { readdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { CandidateAction, InventoryStack, Position3 } from "../contracts/index.ts";
 import { loadPlannerConfig } from "../shared/config.ts";
 import { isoNow } from "../shared/logger.ts";
@@ -17,6 +18,10 @@ export interface MockWorldSnapshot {
   timeOfDay: "day" | "night" | "sunrise" | "sunset";
   visibleHazards: string[];
   perceivedResources: string[];
+  nearbyBlocks: string[];
+  nearbyEntities: string[];
+  lineOfSightTarget: string | null;
+  interactionHints: string[];
 }
 
 export class MockMinecraftWorld {
@@ -74,7 +79,7 @@ export class MockMinecraftWorld {
     return absolutePath;
   }
 
-  snapshot(userObjective: string, sceneSummary: string | null, screenshotPath: string) {
+  snapshot(userObjective: string, sceneSummary: string | null) {
     return {
       timestamp: isoNow(),
       userObjective,
@@ -88,8 +93,11 @@ export class MockMinecraftWorld {
       sceneSummary,
       visibleHazards: [...this.visibleHazards],
       perceivedResources: [...this.perceivedResources],
+      nearbyBlocks: ["grass", "dirt", "log", "stone"],
+      nearbyEntities: [],
+      lineOfSightTarget: this.perceivedResources[0] ?? null,
+      interactionHints: ["tree_visible", "stone_visible", "structured_perception_only"],
       goalProgress: this.estimateGoalProgress(userObjective),
-      screenshotPath,
     };
   }
 
@@ -156,6 +164,31 @@ export class MockMinecraftWorld {
         this.equippedItem = item;
         break;
       }
+      case "smelt": {
+        const inputItem = String(action.arguments.input_item ?? "iron_ore");
+        const outputItem = String(action.arguments.item ?? "iron_ingot");
+        const count = Math.min(Number(action.arguments.count ?? 1), this.countItem(inputItem));
+        if (this.countItem("furnace") < 1) {
+          status = "failed";
+          failureReason = "No nearby furnace is available for smelting.";
+          durationSeconds = 5;
+          targetReached = false;
+          terrainChangedAsExpected = false;
+          break;
+        }
+        if (count < 1) {
+          status = "failed";
+          failureReason = `Missing smelt input: ${inputItem}.`;
+          durationSeconds = 5;
+          targetReached = false;
+          terrainChangedAsExpected = false;
+          break;
+        }
+        changeInventory(inputItem, -count);
+        changeInventory(outputItem, count);
+        durationSeconds = 14;
+        break;
+      }
       case "equip": {
         const item = String(action.arguments.item ?? "air");
         if (this.countItem(item) < 1) {
@@ -182,6 +215,20 @@ export class MockMinecraftWorld {
         if (!this.perceivedResources.includes("oak_tree")) {
           this.perceivedResources.push("oak_tree");
         }
+        break;
+      }
+      case "place": {
+        const blockType = String(action.arguments.block_type ?? "crafting_table");
+        if (this.countItem(blockType) < 1) {
+          status = "failed";
+          failureReason = `Cannot place ${blockType}; it is not in inventory.`;
+          durationSeconds = 4;
+          targetReached = false;
+          terrainChangedAsExpected = false;
+          break;
+        }
+        changeInventory(blockType, -1);
+        durationSeconds = 6;
         break;
       }
       default: {
@@ -218,6 +265,11 @@ export class MockMinecraftWorld {
 
   private async resolveSampleFrame(): Promise<string | null> {
     const screenshotDirectory = projectPath(this.config.screenshotDirectory);
+    const artifactFramesDirectory = projectPath("artifacts", "frames");
+
+    if (path.resolve(screenshotDirectory) === path.resolve(artifactFramesDirectory)) {
+      return null;
+    }
 
     try {
       const files = (await readdir(screenshotDirectory))

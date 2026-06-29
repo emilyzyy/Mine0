@@ -1,9 +1,16 @@
 import type { ActionOutcome, CandidateAction, InventoryStack, Position3, SubgoalIntent, WorldState } from "../contracts/index.ts";
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { promisify } from "node:util";
+import { Vec3 } from "vec3";
 import { parseActionOutcome, parseWorldState } from "../contracts/index.ts";
+import { requiresPlacedCraftingTable } from "../planner/craft_prerequisites.ts";
 import { loadPlannerConfig } from "../shared/config.ts";
 import { projectPath } from "../shared/fs.ts";
 import { MockMinecraftWorld } from "./mock_world.ts";
 import type { ExecutorBackend, ExecutorObservation } from "./executor_interface.ts";
+
+const execFileAsync = promisify(execFile);
 
 export class MineflayerExecutor implements ExecutorBackend {
   readonly kind = "mineflayer" as const;
@@ -11,8 +18,8 @@ export class MineflayerExecutor implements ExecutorBackend {
 
   get displayName(): string {
     return this.activeBackend === "live"
-      ? "Mineflayer + prismarine-viewer"
-      : "Mineflayer + prismarine-viewer (mock)";
+      ? "Mineflayer structured perception"
+      : "Mineflayer structured perception (mock)";
   }
 
   private readonly config = loadPlannerConfig();
@@ -21,23 +28,22 @@ export class MineflayerExecutor implements ExecutorBackend {
   private movementState: MovementState | null = null;
   private viewerStarted = false;
   private screenshotSequence = 0;
-  private headlessCaptureUnavailableReason: string | null = null;
+  private screenshotCaptureUnavailableReason: string | null = null;
   private readonly liveMode = this.config.mineflayer.enabled && Boolean(this.config.mineflayer.host);
 
   async observe(userObjective: string): Promise<ExecutorObservation> {
     if (this.liveMode) {
       const bot = await this.ensureBot();
       this.activeBackend = "live";
-      const screenshotPath = await this.captureLiveScreenshot(bot);
       return {
-        worldState: parseWorldState(this.snapshotLiveWorld(bot, userObjective, screenshotPath)),
+        worldState: parseWorldState(this.snapshotLiveWorld(bot, userObjective)),
       };
     }
 
     this.activeBackend = "mock";
     const screenshotPath = await this.world.captureFrame();
     return {
-      worldState: parseWorldState(this.world.snapshot(userObjective, null, screenshotPath)),
+      worldState: parseWorldState(this.world.snapshot(userObjective, null)),
     };
   }
 
@@ -97,7 +103,7 @@ export class MineflayerExecutor implements ExecutorBackend {
     this.movementState = null;
     this.viewerStarted = false;
     this.screenshotSequence = 0;
-    this.headlessCaptureUnavailableReason = null;
+    this.screenshotCaptureUnavailableReason = null;
     this.activeBackend = "mock";
   }
 
@@ -180,127 +186,109 @@ export class MineflayerExecutor implements ExecutorBackend {
 
     bot.pathfinder.setMovements(movementState.movements);
 
-    if (this.config.mineflayer.viewerEnabled && !this.viewerStarted) {
-      const viewerModule = await import("prismarine-viewer");
-      const mineflayerViewer = ((viewerModule as Record<string, unknown>).mineflayer ??
-        (viewerModule.default as Record<string, unknown> | undefined)?.mineflayer) as
-        | ((bot: MineflayerBot, options: Record<string, unknown>) => void)
-        | undefined;
-      if (mineflayerViewer) {
-        mineflayerViewer(bot, {
-          port: this.config.mineflayer.viewerPort,
-          firstPerson: this.config.mineflayer.viewerFirstPerson,
-          viewDistance: 6,
-        });
-        this.viewerStarted = true;
-      }
-    }
-
     this.bot = bot;
     this.movementState = movementState;
     return bot;
   }
 
   private async captureLiveScreenshot(bot: MineflayerBot): Promise<string> {
-    if (!this.config.mineflayer.headlessCaptureEnabled || this.headlessCaptureUnavailableReason) {
-      return this.world.captureFrame();
+    if (!this.config.mineflayer.headlessCaptureEnabled || this.screenshotCaptureUnavailableReason) {
+      return "";
     }
 
     try {
       const screenshotDirectory = projectPath(this.config.screenshotDirectory, "mineflayer-live");
       await import("node:fs/promises").then(({ mkdir }) => mkdir(screenshotDirectory, { recursive: true }));
-      const frameBuffer = await this.captureSingleHeadlessFrame(bot);
       const screenshotPath = projectPath(
         this.config.screenshotDirectory,
         "mineflayer-live",
-        `frame_${String(++this.screenshotSequence).padStart(4, "0")}.jpg`,
+        `frame_${String(++this.screenshotSequence).padStart(4, "0")}.png`,
       );
-      await import("node:fs/promises").then(({ writeFile }) => writeFile(screenshotPath, frameBuffer));
+      await this.ensureViewerStarted(bot);
+      await this.captureViewerScreenshot(screenshotPath);
       return screenshotPath;
     } catch (error) {
-      this.headlessCaptureUnavailableReason =
-        error instanceof Error ? error.message : "Headless POV capture failed.";
-      return this.world.captureFrame();
+      this.screenshotCaptureUnavailableReason =
+        error instanceof Error ? error.message : "Mineflayer viewer screenshot capture failed.";
+      return "";
     }
   }
 
-  private async captureSingleHeadlessFrame(bot: MineflayerBot): Promise<Buffer> {
-    const viewerModule = await import("prismarine-viewer");
-    const headlessViewer = ((viewerModule as Record<string, unknown>).headless ??
-      (viewerModule.default as Record<string, unknown> | undefined)?.headless) as
-      | ((bot: MineflayerBot, options: Record<string, unknown>) => unknown)
-      | undefined;
-    if (!headlessViewer) {
-      throw new Error("prismarine-viewer headless mode is unavailable.");
+  private async ensureViewerStarted(bot: MineflayerBot): Promise<void> {
+    if (this.viewerStarted || (!this.config.mineflayer.viewerEnabled && !this.config.mineflayer.headlessCaptureEnabled)) {
+      return;
     }
 
-    const net = await import("node:net");
+    try {
+      const viewerModule = await import("prismarine-viewer");
+      const mineflayerViewer = ((viewerModule as Record<string, unknown>).mineflayer ??
+        (viewerModule.default as Record<string, unknown> | undefined)?.mineflayer) as
+        | ((bot: MineflayerBot, options: Record<string, unknown>) => unknown)
+        | undefined;
+      if (!mineflayerViewer) {
+        throw new Error("prismarine-viewer mineflayer viewer mode is unavailable.");
+      }
 
-    return await new Promise<Buffer>((resolve, reject) => {
-      const server = net.createServer();
-      let settled = false;
-
-      const finish = (handler: () => void) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        handler();
-        server.close();
-      };
-
-      server.on("connection", (socket) => {
-        let pending = Buffer.alloc(0);
-        socket.on("data", (chunk) => {
-          pending = Buffer.concat([pending, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)]);
-          if (pending.length < 4) {
-            return;
-          }
-
-          const frameLength = pending.readUInt32LE(0);
-          if (pending.length < 4 + frameLength) {
-            return;
-          }
-
-          const frame = pending.subarray(4, 4 + frameLength);
-          socket.destroy();
-          finish(() => resolve(frame));
-        });
-        socket.on("error", (error) => finish(() => reject(error)));
+      mineflayerViewer(bot, {
+        port: this.config.mineflayer.viewerPort,
+        firstPerson: this.config.mineflayer.viewerFirstPerson,
+        viewDistance: 6,
       });
-      server.on("error", (error) => finish(() => reject(error)));
-
-      server.listen(0, "127.0.0.1", () => {
-        const address = server.address();
-        if (!address || typeof address === "string") {
-          finish(() => reject(new Error("Could not allocate a local port for POV capture.")));
-          return;
-        }
-
-        try {
-          headlessViewer(bot, {
-            output: `127.0.0.1:${address.port}`,
-            frames: 1,
-            width: this.config.mineflayer.screenshotWidth,
-            height: this.config.mineflayer.screenshotHeight,
-            viewDistance: 4,
-          });
-        } catch (error) {
-          finish(() =>
-            reject(
-              error instanceof Error ? error : new Error("Failed to start prismarine headless capture."),
-            ),
-          );
-        }
-      });
-
-      setTimeout(() => {
-        finish(() => reject(new Error("Timed out while waiting for a headless POV frame.")));
-      }, 10_000);
-    });
+      this.viewerStarted = true;
+      await this.sleep(1_500);
+    } catch (error) {
+      this.screenshotCaptureUnavailableReason =
+        error instanceof Error ? error.message : "Mineflayer viewer could not be initialized.";
+    }
   }
 
-  private snapshotLiveWorld(bot: MineflayerBot, userObjective: string, screenshotPath: string): WorldState {
+  private async captureViewerScreenshot(screenshotPath: string): Promise<void> {
+    const browserPath = this.findBrowserExecutable();
+    if (!browserPath) {
+      throw new Error("No supported Chrome or Edge executable was found for Mineflayer viewer screenshots.");
+    }
+
+    const viewerUrl = `http://127.0.0.1:${this.config.mineflayer.viewerPort}`;
+    const args = [
+      "--headless=new",
+      "--enable-webgl",
+      "--ignore-gpu-blocklist",
+      "--use-angle=swiftshader",
+      "--hide-scrollbars",
+      "--mute-audio",
+      `--window-size=${this.config.mineflayer.screenshotWidth},${this.config.mineflayer.screenshotHeight}`,
+      "--run-all-compositor-stages-before-draw",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--virtual-time-budget=8000",
+      `--screenshot=${screenshotPath}`,
+      viewerUrl,
+    ];
+
+    await execFileAsync(browserPath, args, { timeout: 20_000 });
+  }
+
+  private findBrowserExecutable(): string | null {
+    const candidates = [
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    ];
+
+    return candidates.find((candidate) => {
+      return existsSync(candidate);
+    }) ?? null;
+  }
+
+  private snapshotLiveWorld(bot: MineflayerBot, userObjective: string): WorldState {
+    const inventory = this.readInventory(bot);
+    const perceivedResources = this.scanResources(bot);
+    const nearbyBlocks = this.scanNearbyBlocks(bot);
+    const nearbyEntities = this.scanNearbyEntities(bot);
+    const lineOfSightTarget = this.readLineOfSightTarget(bot);
+    const interactionHints = this.buildInteractionHints(bot, inventory, perceivedResources, nearbyBlocks);
+
     return {
       timestamp: new Date().toISOString(),
       userObjective,
@@ -312,14 +300,21 @@ export class MineflayerExecutor implements ExecutorBackend {
       biomeOrRegionHint: bot.game.dimension ?? "unknown_region",
       health: Number(bot.health ?? 20),
       hunger: Number(bot.food ?? 20),
-      inventory: this.readInventory(bot),
+      inventory,
       equippedItem: bot.heldItem?.name ?? "air",
       timeOfDay: this.toTimeOfDay(bot.time?.timeOfDay ?? 6000),
-      sceneSummary: null,
+      sceneSummary: [
+        `Line of sight: ${lineOfSightTarget ?? "none"}.`,
+        `Nearby blocks: ${nearbyBlocks.slice(0, 5).join(", ") || "none"}.`,
+        `Nearby entities: ${nearbyEntities.slice(0, 3).join(", ") || "none"}.`,
+      ].join(" "),
       visibleHazards: this.scanHazards(bot),
-      perceivedResources: this.scanResources(bot),
-      goalProgress: this.estimateGoalProgress(userObjective, this.readInventory(bot)),
-      screenshotPath,
+      perceivedResources,
+      nearbyBlocks,
+      nearbyEntities,
+      lineOfSightTarget,
+      interactionHints,
+      goalProgress: this.estimateGoalProgress(userObjective, inventory),
     };
   }
 
@@ -395,11 +390,19 @@ export class MineflayerExecutor implements ExecutorBackend {
       case "craft":
         await this.craft(bot, String(action.arguments.item ?? "crafting_table"), Number(action.arguments.count ?? 1));
         return;
+      case "smelt":
+        await this.smelt(
+          bot,
+          String(action.arguments.item ?? "iron_ingot"),
+          String(action.arguments.input_item ?? "iron_ore"),
+          Number(action.arguments.count ?? 1),
+        );
+        return;
       case "equip":
         await this.equip(bot, String(action.arguments.item ?? "air"));
         return;
       case "place":
-        await this.place(bot, String(action.arguments.block_type ?? "oak_planks"), String(action.arguments.location ?? "ahead"));
+        await this.place(bot, String(action.arguments.block_type ?? "oak_planks"), String(action.arguments.location ?? "nearby"));
         return;
       default:
         throw new Error(`Unsupported Mineflayer action: ${action.name}`);
@@ -419,12 +422,21 @@ export class MineflayerExecutor implements ExecutorBackend {
   }
 
   private async explore(bot: MineflayerBot, direction: string): Promise<void> {
+    if (direction === "down") {
+      await this.descendForSearch(bot);
+      return;
+    }
+
     const movementState = this.requireMovementState();
     const yaw = this.directionToYaw(bot.entity.yaw, direction);
     await bot.look(yaw, 0, true);
 
     const offset = this.directionOffsetFromYaw(yaw, 6);
-    const position = bot.entity.position.offset(offset.x, 0, offset.z).floored();
+    const position = {
+      x: Math.floor(bot.entity.position.x + offset.x),
+      y: Math.floor(bot.entity.position.y),
+      z: Math.floor(bot.entity.position.z + offset.z),
+    };
     const goal = new movementState.goals.GoalNear(position.x, position.y, position.z, 1);
 
     try {
@@ -438,6 +450,41 @@ export class MineflayerExecutor implements ExecutorBackend {
     bot.setControlState("sprint", true);
     await this.sleep(2_500);
     bot.clearControlStates();
+  }
+
+  private async descendForSearch(bot: MineflayerBot): Promise<void> {
+    const origin = bot.entity.position.floored();
+    const forward = this.horizontalStepFromYaw(bot.entity.yaw);
+    const footPosition = new Vec3(origin.x + forward.x, origin.y - 1, origin.z + forward.z);
+    const headPosition = footPosition.offset(0, 1, 0);
+    const upperPosition = footPosition.offset(0, 2, 0);
+
+    for (const target of [upperPosition, headPosition, footPosition]) {
+      const block = bot.blockAt(target);
+      if (!this.isDiggableSearchBlock(block)) {
+        continue;
+      }
+
+      await this.gotoBlock(bot, { x: origin.x, y: origin.y, z: origin.z }, 1);
+      await bot.lookAt(target.offset(0.5, 0.5, 0.5), true);
+      const harvestTool = bot.pathfinder.bestHarvestTool(block);
+      if (harvestTool) {
+        try {
+          await bot.equip(harvestTool, "hand");
+        } catch {
+          // Keep going if tool equipping fails.
+        }
+      }
+      await this.withTimeout(bot.dig(block, true), this.config.mineflayer.actionTimeoutMs, "Digging staircase timed out.");
+      await this.sleep(150);
+    }
+
+    const standingBlock = bot.blockAt(footPosition);
+    if (standingBlock && this.isSolidPlacementSupport(standingBlock)) {
+      throw new Error("Downward exploration could not clear a safe step.");
+    }
+
+    await this.gotoBlock(bot, { x: footPosition.x, y: footPosition.y, z: footPosition.z }, 0);
   }
 
   private async collect(bot: MineflayerBot, blockType: string, count: number): Promise<void> {
@@ -484,48 +531,148 @@ export class MineflayerExecutor implements ExecutorBackend {
       throw new Error(`Unknown craft item: ${itemName}`);
     }
 
-    const heldTableBlock = normalizedItemName === "crafting_table" ? null : bot.findBlock({
-      matching: (block: { name?: string }) => block.name === "crafting_table",
-      maxDistance: 8,
-    });
+    const needsWorkstation = requiresPlacedCraftingTable(normalizedItemName);
+    let heldTableBlock =
+      normalizedItemName === "crafting_table" ? null : this.findNearbyCraftingTableBlock(bot);
+
+    if (needsWorkstation && !heldTableBlock) {
+      throw new Error(`No available recipe for ${itemName}. Place a crafting table nearby first.`);
+    }
+
+    if (heldTableBlock) {
+      await this.gotoBlock(bot, heldTableBlock.position, 2);
+      heldTableBlock = this.findNearbyCraftingTableBlock(bot, 8) ?? heldTableBlock;
+    }
+
     const recipes = bot.recipesFor(item.id, null, count, heldTableBlock ?? null);
     const recipe = recipes[0];
     if (!recipe) {
-      throw new Error(`No available recipe for ${itemName}.`);
+      throw new Error(
+        needsWorkstation
+          ? `No available recipe for ${itemName}. Place a crafting table nearby first.`
+          : `No available recipe for ${itemName}.`,
+      );
     }
 
     await this.withTimeout(bot.craft(recipe, count, heldTableBlock ?? null), this.config.mineflayer.actionTimeoutMs, "Crafting timed out.");
   }
 
-  private async equip(bot: MineflayerBot, itemName: string): Promise<void> {
-    const normalizedItemName = this.normalizeLegacyItemName(itemName);
-    const item = bot.inventory.items().find((entry) => entry.name === normalizedItemName);
+  private findNearbyCraftingTableBlock(bot: MineflayerBot, maxDistance = 32) {
+    return bot.findBlock({
+      matching: (block: { name?: string }) => block.name === "crafting_table",
+      maxDistance,
+    });
+  }
+
+  private findNearbyFurnaceBlock(bot: MineflayerBot, maxDistance = 32) {
+    return bot.findBlock({
+      matching: (block: { name?: string }) => block.name === "furnace",
+      maxDistance,
+    });
+  }
+
+  private findFuelItem(bot: MineflayerBot): { name: string; count: number } | null {
+    const inventoryItems = bot.inventory.items();
+    return inventoryItems.find((entry) => ["coal", "charcoal", "planks", "log", "wood"].includes(entry.name)) ?? null;
+  }
+
+  private smeltableInventoryInputs(bot: MineflayerBot): string[] {
+    const inventoryNames = new Set(bot.inventory.items().map((entry) => entry.name));
+    return ["iron_ore", "gold_ore", "sand", "cobblestone"].filter((item) => inventoryNames.has(item));
+  }
+
+  private async smelt(bot: MineflayerBot, outputItemName: string, inputItemName: string, count: number): Promise<void> {
+    const furnace = this.findNearbyFurnaceBlock(bot);
+    if (!furnace) {
+      throw new Error("No nearby furnace is available for smelting.");
+    }
+
+    const normalizedInput = this.normalizeLegacyItemName(inputItemName);
+    const inputItem = bot.inventory.items().find((entry) => entry.name === normalizedInput);
+    if (!inputItem) {
+      throw new Error(`Cannot smelt ${outputItemName}; ${inputItemName} is not in inventory.`);
+    }
+
+    const fuelItem = this.findFuelItem(bot);
+    if (!fuelItem) {
+      throw new Error("Cannot smelt items because no furnace fuel is available.");
+    }
+
+    await this.gotoBlock(bot, furnace.position, 2);
+    const furnaceWindow = await this.withTimeout(bot.openFurnace(furnace), 8_000, "Opening furnace timed out.");
+
+    try {
+      await this.withTimeout(furnaceWindow.putInput(inputItem.type ?? inputItem, null, Math.min(count, inputItem.count)), 8_000, "Loading furnace input timed out.");
+      await this.withTimeout(furnaceWindow.putFuel(fuelItem.type ?? fuelItem, null, 1), 8_000, "Loading furnace fuel timed out.");
+      await this.waitForSmeltOutput(furnaceWindow, count);
+      await this.withTimeout(furnaceWindow.takeOutput(), 8_000, "Taking furnace output timed out.");
+    } finally {
+      furnaceWindow.close();
+    }
+  }
+
+  private async waitForSmeltOutput(furnaceWindow: OpenedFurnace, count: number): Promise<void> {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < this.config.mineflayer.actionTimeoutMs) {
+      const outputCount = Number(furnaceWindow.outputItem()?.count ?? 0);
+      if (outputCount >= count || outputCount > 0) {
+        return;
+      }
+      await this.sleep(250);
+    }
+
+    throw new Error("Smelting timed out before output became available.");
+  }
+
+  private findInventoryItem(bot: MineflayerBot, itemName: string) {
+    return bot.inventory.items().find((entry) => entry.name === itemName) ?? null;
+  }
+
+  private async equipInventoryItem(bot: MineflayerBot, itemName: string): Promise<void> {
+    const item = this.findInventoryItem(bot, itemName);
     if (!item) {
       throw new Error(`Item not in inventory: ${itemName}`);
     }
     await this.withTimeout(bot.equip(item, "hand"), 5_000, "Equip timed out.");
   }
 
+  private async equip(bot: MineflayerBot, itemName: string): Promise<void> {
+    const normalizedItemName = this.normalizeLegacyItemName(itemName);
+    await this.equipInventoryItem(bot, normalizedItemName);
+  }
+
   private async place(bot: MineflayerBot, blockType: string, location: string): Promise<void> {
     const normalizedBlockType = this.normalizeLegacyItemName(blockType);
-    const item = bot.inventory.items().find((entry) => entry.name === normalizedBlockType);
-    if (!item) {
+    if (!this.findInventoryItem(bot, normalizedBlockType)) {
       throw new Error(`Cannot place ${blockType}; it is not in inventory.`);
     }
-    await bot.equip(item, "hand");
 
-    const placementTargets = this.findPlacementTargets(bot, location);
+    if (!bot.registry.blocksByName?.[normalizedBlockType]) {
+      await this.usePlaceableItem(bot, normalizedBlockType, location);
+      return;
+    }
+
+    const placementTargets = this.sortPlacementTargetsAwayFromBot(
+      bot,
+      this.resolveAllPlacementTargets(bot, normalizedBlockType, location),
+    );
     const failureReasons: string[] = [];
 
     for (const target of placementTargets) {
       try {
-        await this.gotoBlock(bot, target.support.position, 1);
-        await bot.lookAt(target.targetCenter, true);
-        await this.withTimeout(
-          bot.placeBlock(target.support, { x: 0, y: 1, z: 0 }),
-          this.config.mineflayer.actionTimeoutMs,
-          "Place action timed out.",
-        );
+        await this.preparePlacementClearance(bot, target);
+        await this.equipInventoryItem(bot, normalizedBlockType);
+        await bot.lookAt(target.clickTarget, true);
+        try {
+          await this.withTimeout(target.execute(bot), this.config.mineflayer.actionTimeoutMs, "Place action timed out.");
+        } catch (error) {
+          if (!this.placementSucceeded(bot, target, normalizedBlockType)) {
+            throw error;
+          }
+        }
+        if (!this.placementSucceeded(bot, target, normalizedBlockType)) {
+          throw new Error(`Placement did not result in a ${normalizedBlockType} block at the target position.`);
+        }
         return;
       } catch (error) {
         failureReasons.push(error instanceof Error ? error.message : "Unknown placement failure.");
@@ -537,6 +684,295 @@ export class MineflayerExecutor implements ExecutorBackend {
         ? `Unable to find a valid nearby placement spot for ${blockType}: ${failureReasons.join(" | ")}`
         : `Unable to find a valid nearby placement spot for ${blockType}.`,
     );
+  }
+
+  private async usePlaceableItem(bot: MineflayerBot, itemName: string, location: string): Promise<void> {
+    const needsWater = /water|river|lake|ocean|pond/i.test(location);
+    const target = needsWater
+      ? bot.findBlock({
+          matching: (block) => block.name === "water" || block.name === "flowing_water",
+          maxDistance: 24,
+        })
+      : bot.blockAtCursor?.(6) ?? null;
+    if (!target) {
+      throw new Error(`No reachable ${needsWater ? "water" : "interaction"} target is available for ${itemName}.`);
+    }
+
+    if (needsWater && bot.entity.position.distanceTo(target.position) > 5) {
+      await this.gotoBlock(bot, target.position, 3);
+    }
+    const beforeCount = this.findInventoryItem(bot, itemName)?.count ?? 0;
+    await this.equipInventoryItem(bot, itemName);
+    await bot.lookAt(new Vec3(target.position.x + 0.5, target.position.y + 0.8, target.position.z + 0.5), true);
+    bot.activateItem();
+    await this.sleep(800);
+
+    const afterCount = this.findInventoryItem(bot, itemName)?.count ?? 0;
+    if (afterCount >= beforeCount) {
+      throw new Error(`Using ${itemName} did not consume or place the item at the selected target.`);
+    }
+  }
+
+  private resolveAllPlacementTargets(
+    bot: MineflayerBot,
+    blockType: string,
+    location: string,
+  ): PlacementAttempt[] {
+    if (this.isTallPlacementBlock(blockType)) {
+      return this.findTallBlockPlacementTargets(bot, location);
+    }
+
+    return this.findFlatBlockPlacementTargets(bot, location);
+  }
+
+  private isTallPlacementBlock(blockType: string): boolean {
+    return blockType.includes("door");
+  }
+
+  private async preparePlacementClearance(bot: MineflayerBot, target: PlacementAttempt): Promise<void> {
+    if (this.botOccupiesAnyBlock(bot, target.occupiedBlocks)) {
+      await this.stepClearOfBlocks(bot, target.occupiedBlocks);
+    }
+
+    await this.clearPlacementBlocks(bot, target.occupiedBlocks);
+
+    if (target.standPosition && !this.isAdjacentStandPosition(bot, target.standPosition)) {
+      await this.gotoBlock(bot, target.standPosition, 0);
+    }
+  }
+
+  private async clearPlacementBlocks(bot: MineflayerBot, occupiedBlocks: Vec3[]): Promise<void> {
+    for (const position of occupiedBlocks) {
+      const block = bot.blockAt(position);
+      if (!this.isClearablePlacementBlock(block)) {
+        continue;
+      }
+
+      const harvestTool = bot.pathfinder.bestHarvestTool(block);
+      if (harvestTool) {
+        try {
+          await bot.equip(harvestTool, "hand");
+        } catch {
+          // Keep going if tool equipping fails.
+        }
+      }
+      await bot.lookAt(position.offset(0.5, 0.5, 0.5), true);
+      await this.withTimeout(bot.dig(block, true), this.config.mineflayer.actionTimeoutMs, "Clearing placement space timed out.");
+      await this.sleep(150);
+    }
+  }
+
+  private sortPlacementTargetsAwayFromBot(bot: MineflayerBot, targets: PlacementAttempt[]): PlacementAttempt[] {
+    return [...targets].sort((left, right) => {
+      const leftBlocked = this.botOccupiesAnyBlock(bot, left.occupiedBlocks) ? 1 : 0;
+      const rightBlocked = this.botOccupiesAnyBlock(bot, right.occupiedBlocks) ? 1 : 0;
+      if (leftBlocked !== rightBlocked) {
+        return leftBlocked - rightBlocked;
+      }
+
+      const leftDistance = bot.entity.position.distanceTo(left.clickTarget);
+      const rightDistance = bot.entity.position.distanceTo(right.clickTarget);
+      return leftDistance - rightDistance;
+    });
+  }
+
+  private botOccupiesAnyBlock(bot: MineflayerBot, blocks: Vec3[]): boolean {
+    return blocks.some((block) => this.botOccupiesBlock(bot, block));
+  }
+
+  private botOccupiesBlock(bot: MineflayerBot, block: Vec3): boolean {
+    const feet = this.botFeetBlock(bot);
+    const head = feet.offset(0, 1, 0);
+    return (
+      this.blockTooCloseToBot(bot, block) ||
+      this.sameBlock(feet, block) ||
+      this.sameBlock(head, block)
+    );
+  }
+
+  private sameBlock(
+    left: { x: number; y: number; z: number },
+    right: { x: number; y: number; z: number },
+  ): boolean {
+    return left.x === right.x && left.y === right.y && left.z === right.z;
+  }
+
+  private botFeetBlock(bot: MineflayerBot): Vec3 {
+    return bot.entity.position.floored();
+  }
+
+  private blockTooCloseToBot(bot: MineflayerBot, position: Vec3): boolean {
+    const center = position.offset(0.5, 0.5, 0.5);
+    return bot.entity.position.distanceTo(center) < 1.15;
+  }
+
+  private isAdjacentStandPosition(
+    bot: MineflayerBot,
+    standPosition: { x: number; y: number; z: number },
+  ): boolean {
+    const feet = bot.entity.position.floored();
+    return (
+      Math.abs(feet.x - standPosition.x) <= 1 &&
+      Math.abs(feet.z - standPosition.z) <= 1 &&
+      Math.abs(feet.y - standPosition.y) <= 1
+    );
+  }
+
+  private async stepClearOfBlocks(bot: MineflayerBot, occupiedBlocks: Vec3[]): Promise<void> {
+    if (!this.botOccupiesAnyBlock(bot, occupiedBlocks)) {
+      return;
+    }
+
+    const anchor = occupiedBlocks[0] ?? this.botFeetBlock(bot);
+    const candidates = [
+      anchor.offset(2, 0, 0),
+      anchor.offset(-2, 0, 0),
+      anchor.offset(0, 0, 2),
+      anchor.offset(0, 0, -2),
+      anchor.offset(2, 0, 2),
+      anchor.offset(-2, 0, 2),
+      anchor.offset(2, 0, -2),
+      anchor.offset(-2, 0, -2),
+    ];
+
+    for (const candidate of candidates) {
+      try {
+        await this.gotoBlock(bot, candidate, 0);
+        if (!this.botOccupiesAnyBlock(bot, occupiedBlocks)) {
+          return;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  private findFlatBlockPlacementTargets(bot: MineflayerBot, location: string): PlacementAttempt[] {
+    return this.resolvePlacementTargets(bot, location)
+      .map((target) => {
+        const targetPosition = new Vec3(
+          target.support.position.x,
+          target.support.position.y + 1,
+          target.support.position.z,
+        );
+
+        return {
+          occupiedBlocks: [targetPosition],
+          clickTarget: target.targetCenter,
+          execute: async (activeBot: MineflayerBot) => {
+            await activeBot.placeBlock(target.support, new Vec3(0, 1, 0));
+          },
+        };
+      });
+  }
+
+  private placementSucceeded(bot: MineflayerBot, target: PlacementAttempt, blockType: string): boolean {
+    return target.occupiedBlocks.some((position) => {
+      const block = bot.blockAt(position) as BotBlock | null;
+      return (block?.name ?? "") === blockType;
+    });
+  }
+
+  private findTallBlockPlacementTargets(bot: MineflayerBot, location: string): PlacementAttempt[] {
+    const origin = bot.entity.position.floored();
+    const horizontalOffsets = location === "ahead"
+      ? [
+          { x: 0, z: 1 },
+          { x: 1, z: 1 },
+          { x: -1, z: 1 },
+          { x: 1, z: 0 },
+          { x: -1, z: 0 },
+          { x: 0, z: -1 },
+        ]
+      : [
+          { x: 0, z: 1 },
+          { x: 1, z: 0 },
+          { x: -1, z: 0 },
+          { x: 0, z: -1 },
+          { x: 1, z: 1 },
+          { x: -1, z: 1 },
+          { x: 1, z: -1 },
+          { x: -1, z: -1 },
+        ];
+    const targets: PlacementAttempt[] = [];
+
+    for (const offset of horizontalOffsets) {
+      const bottomPosition = new Vec3(origin.x + offset.x, origin.y, origin.z + offset.z);
+      const topPosition = bottomPosition.offset(0, 1, 0);
+      if (this.botOccupiesAnyBlock(bot, [bottomPosition, topPosition])) {
+        continue;
+      }
+
+      const bottomBlock = bot.blockAt(bottomPosition);
+      const topBlock = bot.blockAt(topPosition);
+      if (!this.isReplaceablePlacementSpace(bottomBlock) || !this.isReplaceablePlacementSpace(topBlock)) {
+        continue;
+      }
+
+      const groundBelowDoor = bot.blockAt(bottomPosition.offset(0, -1, 0));
+      if (!this.isSolidPlacementSupport(groundBelowDoor)) {
+        continue;
+      }
+
+      for (const face of [
+        new Vec3(1, 0, 0),
+        new Vec3(-1, 0, 0),
+        new Vec3(0, 0, 1),
+        new Vec3(0, 0, -1),
+      ]) {
+        const reference = bot.blockAt(bottomPosition.minus(face));
+        if (!this.isSolidPlacementSupport(reference)) {
+          continue;
+        }
+
+        const standPosition = bottomPosition.plus(face.scaled(2));
+        targets.push({
+          occupiedBlocks: [bottomPosition, topPosition],
+          standPosition: { x: standPosition.x, y: standPosition.y, z: standPosition.z },
+          clickTarget: bottomPosition.offset(0.5, 0.5, 0.5),
+          execute: async (activeBot: MineflayerBot) => {
+            await activeBot.placeBlock(reference, face);
+          },
+        });
+
+        if (groundBelowDoor) {
+          targets.push({
+            occupiedBlocks: [bottomPosition, topPosition],
+            standPosition: { x: standPosition.x, y: standPosition.y, z: standPosition.z },
+            clickTarget: groundBelowDoor.position.offset(0.5, 1, 0.5),
+            execute: async (activeBot: MineflayerBot) => {
+              await activeBot.placeBlock(groundBelowDoor, new Vec3(0, 1, 0));
+            },
+          });
+        }
+      }
+    }
+
+    return dedupePlacementAttempts(targets);
+  }
+
+  private resolvePlacementTargets(
+    bot: MineflayerBot,
+    location: string,
+  ): Array<{
+    support: BotBlock;
+    targetCenter: Vec3;
+  }> {
+    if (location === "nearby") {
+      return dedupePlacementTargets([
+        ...this.findPlacementTargets(bot, "underfoot"),
+        ...this.findPlacementTargets(bot, "ahead"),
+      ]);
+    }
+
+    if (location === "ahead") {
+      return dedupePlacementTargets([
+        ...this.findPlacementTargets(bot, "underfoot"),
+        ...this.findPlacementTargets(bot, "ahead"),
+      ]);
+    }
+
+    return this.findPlacementTargets(bot, location);
   }
 
   private async gotoBlock(bot: MineflayerBot, position: { x: number; y: number; z: number }, range: number): Promise<void> {
@@ -553,10 +989,12 @@ export class MineflayerExecutor implements ExecutorBackend {
   }
 
   private readInventory(bot: MineflayerBot): InventoryStack[] {
-    return bot.inventory.items().map((item) => ({
-      item: item.name,
-      count: item.count,
-    }));
+    const aggregated = new Map<string, number>();
+    for (const item of bot.inventory.items()) {
+      aggregated.set(item.name, (aggregated.get(item.name) ?? 0) + item.count);
+    }
+
+    return [...aggregated.entries()].map(([item, count]) => ({ item, count }));
   }
 
   private inventoryMap(inventory: InventoryStack[]): Map<string, number> {
@@ -609,6 +1047,136 @@ export class MineflayerExecutor implements ExecutorBackend {
     return [...resources];
   }
 
+  private scanNearbyBlocks(bot: MineflayerBot): string[] {
+    const blockNames = new Set<string>();
+    const candidates = [
+      "stone",
+      "cobblestone",
+      "coal_ore",
+      "iron_ore",
+      "crafting_table",
+      "log",
+      "log2",
+      "leaves",
+      "dirt",
+      "grass",
+      "sand",
+      "water",
+    ];
+
+    for (const candidate of candidates) {
+      const found = bot.findBlock({
+        matching: (block: { name?: string }) => block.name === candidate,
+        maxDistance: 16,
+      });
+      if (found?.name) {
+        blockNames.add(found.name);
+      }
+    }
+
+    return [...blockNames];
+  }
+
+  private scanNearbyEntities(bot: MineflayerBot): string[] {
+    return Object.values(bot.entities)
+      .filter((entity) => entity.position.distanceTo(bot.entity.position) <= 16)
+      .map((entity) => {
+        const label = entity.name ?? entity.type ?? "unknown_entity";
+        const distance = entity.position.distanceTo(bot.entity.position).toFixed(1);
+        return `${label}@${distance}`;
+      })
+      .slice(0, 8);
+  }
+
+  private readLineOfSightTarget(bot: MineflayerBot): string | null {
+    const lookedBlock = bot.blockAtCursor?.(16);
+    if (lookedBlock?.name) {
+      return lookedBlock.name;
+    }
+
+    const nearestInterestingBlock = bot.findBlock({
+      matching: (block: { name?: string }) => Boolean(block.name && block.name !== "air"),
+      maxDistance: 6,
+    });
+    return nearestInterestingBlock?.name ?? null;
+  }
+
+  private buildInteractionHints(
+    bot: MineflayerBot,
+    inventory: InventoryStack[],
+    perceivedResources: string[],
+    nearbyBlocks: string[],
+  ): string[] {
+    const hints = new Set<string>();
+    const count = (aliases: string[]) =>
+      inventory
+        .filter((stack) => aliases.includes(stack.item))
+        .reduce((sum, stack) => sum + stack.count, 0);
+
+    if (count(["crafting_table"]) > 0) {
+      hints.add("crafting_table_in_inventory");
+      const underfootTargets = this.findPlacementTargets(bot, "underfoot");
+      const aheadTargets = this.findPlacementTargets(bot, "ahead");
+      if (underfootTargets.length > 0) {
+        hints.add("can_place_crafting_table_underfoot");
+      }
+      if (underfootTargets.length > 0 || aheadTargets.length > 0) {
+        hints.add("can_place_crafting_table");
+      }
+    }
+    if (count(["wooden_door", "door"]) > 0) {
+      hints.add("wooden_door_in_inventory");
+      if (this.findTallBlockPlacementTargets(bot, "nearby").length > 0) {
+        hints.add("can_place_wooden_door");
+        hints.add("can_place_door");
+      }
+    }
+    if (count(["furnace"]) > 0) {
+      hints.add("furnace_in_inventory");
+      if (this.findFlatBlockPlacementTargets(bot, "nearby").length > 0) {
+        hints.add("can_place_furnace");
+      }
+    }
+    const nearbyCraftingTable = this.findNearbyCraftingTableBlock(bot);
+    const nearbyFurnace = this.findNearbyFurnaceBlock(bot);
+    if (nearbyCraftingTable || nearbyBlocks.includes("crafting_table")) {
+      hints.add("crafting_table_nearby");
+    }
+    if (nearbyFurnace || nearbyBlocks.includes("furnace")) {
+      hints.add("furnace_nearby");
+    }
+    if (perceivedResources.includes("stone_outcrop") || nearbyBlocks.includes("stone")) {
+      hints.add("stone_visible");
+    }
+    if (perceivedResources.includes("oak_tree") || nearbyBlocks.includes("log") || nearbyBlocks.includes("log2")) {
+      hints.add("tree_visible");
+    }
+    if (count(["planks"]) >= 2) {
+      hints.add("can_craft_sticks");
+    }
+    const hasWorkstationAccess = Boolean(nearbyCraftingTable || nearbyBlocks.includes("crafting_table"));
+    if (count(["planks"]) >= 3 && count(["stick"]) >= 2 && hasWorkstationAccess) {
+      hints.add("can_craft_wooden_pickaxe");
+    }
+    if (count(["cobblestone"]) >= 3 && count(["stick"]) >= 2 && hasWorkstationAccess) {
+      hints.add("can_craft_stone_pickaxe");
+    }
+    if ((nearbyFurnace || nearbyBlocks.includes("furnace")) && this.findFuelItem(bot)) {
+      const smeltableInputs = this.smeltableInventoryInputs(bot);
+      if (smeltableInputs.length > 0) {
+        hints.add("can_smelt");
+      }
+      for (const inputItem of smeltableInputs) {
+        hints.add(`can_smelt_${inputItem}`);
+      }
+    }
+    if (/(pickaxe)/i.test(bot.heldItem?.name ?? "")) {
+      hints.add("holding_pickaxe");
+    }
+    hints.add("structured_perception_only");
+    return [...hints];
+  }
+
   private scanHazards(bot: MineflayerBot): string[] {
     const hazards = new Set<string>();
     if (bot.health <= 8) {
@@ -636,15 +1204,25 @@ export class MineflayerExecutor implements ExecutorBackend {
   }
 
   private estimateGoalProgress(userObjective: string, inventory: InventoryStack[]): number {
-    const countItem = (item: string) => inventory.find((stack) => stack.item === item)?.count ?? 0;
+    const countItem = (aliases: string[]) =>
+      inventory
+        .filter((stack) => aliases.includes(stack.item))
+        .reduce((sum, stack) => sum + stack.count, 0);
     const normalized = userObjective.toLowerCase();
-    if (normalized.includes("pickaxe")) {
-      if (countItem("stone_pickaxe") > 0 || countItem("wooden_pickaxe") > 0) return 1;
-      if (countItem("crafting_table") > 0) return 0.7;
-      if (countItem("oak_log") >= 3 || countItem("oak_planks") >= 4) return 0.35;
+    if (normalized.includes("diamond")) {
+      if (countItem(["diamond_pickaxe"]) > 0 || countItem(["diamond"]) > 0) return 1;
+      if (countItem(["iron_pickaxe"]) > 0) return 0.8;
+      if (countItem(["stone_pickaxe"]) > 0) return 0.55;
+      if (countItem(["wooden_pickaxe"]) > 0) return 0.35;
+      if (countItem(["crafting_table"]) > 0) return 0.2;
     }
-    if (normalized.includes("crafting table") && countItem("crafting_table") > 0) return 1;
-    if (countItem("oak_log") > 0) return 0.2;
+    if (normalized.includes("pickaxe")) {
+      if (countItem(["stone_pickaxe"]) > 0 || countItem(["wooden_pickaxe"]) > 0) return 1;
+      if (countItem(["crafting_table"]) > 0) return 0.7;
+      if (countItem(["oak_log", "log"]) >= 3 || countItem(["oak_planks", "planks"]) >= 4) return 0.35;
+    }
+    if (normalized.includes("crafting table") && countItem(["crafting_table"]) > 0) return 1;
+    if (countItem(["oak_log", "log"]) > 0) return 0.2;
     return 0.05;
   }
 
@@ -699,6 +1277,16 @@ export class MineflayerExecutor implements ExecutorBackend {
     };
   }
 
+  private horizontalStepFromYaw(yaw: number): { x: number; z: number } {
+    const offset = this.directionOffsetFromYaw(yaw, 1);
+    const x = Math.round(offset.x);
+    const z = Math.round(offset.z);
+    if (x === 0 && z === 0) {
+      return { x: 0, z: 1 };
+    }
+    return { x, z };
+  }
+
   private resourceAliases(blockType: string): string[] {
     if (blockType === "oak_log") {
       return ["oak_log", "birch_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log", "log", "log2"];
@@ -712,6 +1300,8 @@ export class MineflayerExecutor implements ExecutorBackend {
         return "planks";
       case "oak_log":
         return "log";
+      case "door":
+        return "wooden_door";
       default:
         return itemName;
     }
@@ -735,15 +1325,19 @@ export class MineflayerExecutor implements ExecutorBackend {
     location: string,
   ): Array<{
     support: BotBlock;
-    targetCenter: { x: number; y: number; z: number };
+    targetCenter: Vec3;
   }> {
     const origin = bot.entity.position.floored();
-    const preferredOffsets = location === "underfoot"
+    const preferredOffsets = location === "underfoot" || location === "nearby"
       ? [
+          { x: 0, z: 1 },
           { x: 1, z: 0 },
           { x: -1, z: 0 },
-          { x: 0, z: 1 },
           { x: 0, z: -1 },
+          { x: 1, z: 1 },
+          { x: -1, z: 1 },
+          { x: 1, z: -1 },
+          { x: -1, z: -1 },
         ]
       : [
           { x: 0, z: 1 },
@@ -754,35 +1348,23 @@ export class MineflayerExecutor implements ExecutorBackend {
           { x: 0, z: -1 },
         ];
 
-    const targets: Array<{ support: BotBlock; targetCenter: { x: number; y: number; z: number } }> = [];
+    const targets: Array<{ support: BotBlock; targetCenter: Vec3 }> = [];
     for (const offset of preferredOffsets) {
-      const supportPosition = {
-        x: origin.x + offset.x,
-        y: origin.y - 1,
-        z: origin.z + offset.z,
-      };
+      const supportPosition = new Vec3(origin.x + offset.x, origin.y - 1, origin.z + offset.z);
       const support = bot.blockAt(supportPosition);
       if (!this.isSolidPlacementSupport(support)) {
         continue;
       }
 
-      const targetPosition = {
-        x: supportPosition.x,
-        y: supportPosition.y + 1,
-        z: supportPosition.z,
-      };
+      const targetPosition = new Vec3(supportPosition.x, supportPosition.y + 1, supportPosition.z);
       const targetBlock = bot.blockAt(targetPosition);
-      if (!this.isReplaceablePlacementSpace(targetBlock)) {
+      if (!this.isPlaceableOrClearableSpace(targetBlock)) {
         continue;
       }
 
       targets.push({
         support,
-        targetCenter: {
-          x: targetPosition.x + 0.5,
-          y: targetPosition.y + 0.5,
-          z: targetPosition.z + 0.5,
-        },
+        targetCenter: targetPosition.offset(0.5, 0.5, 0.5),
       });
     }
 
@@ -802,6 +1384,78 @@ export class MineflayerExecutor implements ExecutorBackend {
     const candidate = block as BotBlock | null;
     return !candidate || ["air", "cave_air", "void_air", "tallgrass", "snow"].includes(candidate.name ?? "air");
   }
+
+  private isClearablePlacementBlock(block: unknown): block is BotBlock {
+    const candidate = block as BotBlock | null;
+    if (!candidate?.name || !candidate.position) {
+      return false;
+    }
+
+    return !this.isReplaceablePlacementSpace(candidate) && ![
+      "bedrock",
+      "water",
+      "flowing_water",
+      "lava",
+      "flowing_lava",
+    ].includes(candidate.name);
+  }
+
+  private isPlaceableOrClearableSpace(block: unknown): boolean {
+    return this.isReplaceablePlacementSpace(block) || this.isClearablePlacementBlock(block);
+  }
+
+  private isDiggableSearchBlock(block: unknown): block is BotBlock {
+    const candidate = block as BotBlock | null;
+    if (!candidate?.name || !candidate.position) {
+      return false;
+    }
+
+    return ![
+      "air",
+      "cave_air",
+      "void_air",
+      "water",
+      "flowing_water",
+      "lava",
+      "flowing_lava",
+      "bedrock",
+    ].includes(candidate.name);
+  }
+}
+
+function dedupePlacementTargets(
+  targets: Array<{ support: BotBlock; targetCenter: Vec3 }>,
+): Array<{ support: BotBlock; targetCenter: Vec3 }> {
+  const seen = new Set<string>();
+  return targets.filter((target) => {
+    const key = `${target.support.position.x},${target.support.position.y},${target.support.position.z}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function dedupePlacementAttempts(targets: PlacementAttempt[]): PlacementAttempt[] {
+  const seen = new Set<string>();
+  return targets.filter((target) => {
+    const key = target.occupiedBlocks
+      .map((block) => `${block.x},${block.y},${block.z}`)
+      .join("|");
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+interface PlacementAttempt {
+  occupiedBlocks: Vec3[];
+  standPosition?: { x: number; y: number; z: number };
+  clickTarget: Vec3;
+  execute: (bot: MineflayerBot) => Promise<void>;
 }
 
 interface BotBlock {
@@ -834,10 +1488,11 @@ interface MineflayerBot {
     pitch: number;
   };
   inventory: {
-    items(): Array<{ name: string; count: number }>;
+    items(): Array<{ name: string; count: number; type?: number }>;
   };
   registry: {
     itemsByName: Record<string, { id: number }>;
+    blocksByName?: Record<string, { id: number }>;
   };
   entities: Record<string, { type?: string; name?: string; position: { distanceTo(other: { x: number; y: number; z: number }): number } }>;
   pathfinder: {
@@ -858,11 +1513,14 @@ interface MineflayerBot {
   dig(block: unknown, forceLook?: boolean): Promise<void>;
   recipesFor(itemId: number, metadata: number | null, count: number, craftingTable: unknown): unknown[];
   craft(recipe: unknown, count: number, craftingTable: unknown): Promise<void>;
+  openFurnace(block: unknown): Promise<OpenedFurnace>;
   equip(item: unknown, destination: string): Promise<void>;
+  activateItem(): void;
   look(yaw: number, pitch: number, force?: boolean): Promise<void>;
   lookAt(position: { x: number; y: number; z: number }, force?: boolean): Promise<void>;
   placeBlock(referenceBlock: unknown, faceVector: { x: number; y: number; z: number }): Promise<void>;
   blockAt(position: { x: number; y: number; z: number }): unknown | null;
+  blockAtCursor?(maxDistance: number): { name?: string; position: { x: number; y: number; z: number } } | null;
 }
 
 interface MovementState {
@@ -876,4 +1534,12 @@ interface MovementState {
   goals: {
     GoalNear: new (x: number, y: number, z: number, range: number) => unknown;
   };
+}
+
+interface OpenedFurnace {
+  putInput(itemType: unknown, metadata: number | null, count: number): Promise<void>;
+  putFuel(itemType: unknown, metadata: number | null, count: number): Promise<void>;
+  takeOutput(): Promise<void>;
+  outputItem(): { count?: number } | null;
+  close(): void;
 }

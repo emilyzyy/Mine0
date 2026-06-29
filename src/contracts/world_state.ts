@@ -34,8 +34,11 @@ export interface WorldState {
   sceneSummary: string | null;
   visibleHazards: string[];
   perceivedResources: string[];
+  nearbyBlocks: string[];
+  nearbyEntities: string[];
+  lineOfSightTarget: string | null;
+  interactionHints: string[];
   goalProgress: number;
-  screenshotPath: string;
 }
 
 export function parsePosition3(value: unknown, label: string): Position3 {
@@ -88,7 +91,22 @@ export function parseWorldState(value: unknown): WorldState {
       objectValue.perceivedResources,
       "WorldState.perceivedResources",
     ),
+    nearbyBlocks: assertStringArray(
+      objectValue.nearbyBlocks,
+      "WorldState.nearbyBlocks",
+    ),
+    nearbyEntities: assertStringArray(
+      objectValue.nearbyEntities,
+      "WorldState.nearbyEntities",
+    ),
+    lineOfSightTarget: assertOptionalString(
+      objectValue.lineOfSightTarget,
+      "WorldState.lineOfSightTarget",
+    ),
+    interactionHints: assertStringArray(
+      objectValue.interactionHints,
+      "WorldState.interactionHints",
+    ),
     goalProgress: assertNumber(objectValue.goalProgress, "WorldState.goalProgress"),
-    screenshotPath: assertString(objectValue.screenshotPath, "WorldState.screenshotPath"),
   };
 }
