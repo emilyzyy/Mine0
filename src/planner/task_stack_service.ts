@@ -224,7 +224,55 @@ function decomposeGenericObjective(objective: string): Subtask[] | null {
   ];
 }
 
+const COMBAT_OBJECTIVE_RE = /\b(zombie|zombies|attack|fight|kill|sword|mob|hostile|combat)\b/i;
+
 function decomposeRootObjective(objective: string, worldState: WorldState): Subtask[] {
+  // Combat/zombie objectives use a fixed combat sequence — no crafting prerequisites.
+  if (COMBAT_OBJECTIVE_RE.test(objective)) {
+    return [
+      {
+        id: "scan_for_zombie",
+        description: "Scan the area for a zombie",
+        planningFocus: "scan for a zombie or hostile mob nearby",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "scan",
+      },
+      {
+        id: "orient_to_zombie",
+        description: "Orient toward the zombie",
+        planningFocus: "turn to face the zombie",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "scan",
+      },
+      {
+        id: "approach_zombie",
+        description: "Approach the zombie",
+        planningFocus: "approach the zombie using movement",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "explore",
+      },
+      {
+        id: "attack_zombie",
+        description: "Attack the zombie with sword",
+        planningFocus: "attack zombie with sword",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "use",
+      },
+      {
+        id: "verify_zombie_outcome",
+        description: "Verify the zombie was defeated",
+        planningFocus: "scan for remaining zombies",
+        compound: false,
+        parentId: "goal",
+        expectedAction: "scan",
+      },
+    ];
+  }
+
   const normalized = objective.toLowerCase();
   const sequentialTasks = decomposeSequentialObjective(objective);
   if (sequentialTasks.length > 0) {
@@ -828,6 +876,18 @@ export class TaskStackService {
       this.completed.push(this.pending.shift() as Subtask);
       this.reconcile(worldState);
       this.advanceInventorySatisfiedHeads(worldState);
+      return;
+    }
+
+    // Repetitive action loop on a scan subtask: the bot is spinning in place.
+    // Force-advance to the next subtask instead of retrying the same scan.
+    if (
+      !options.skipFailureHeuristics &&
+      current.expectedAction === "scan" &&
+      verification?.issueTags.includes("repetitive_action_loop")
+    ) {
+      this.completed.push(this.pending.shift() as Subtask);
+      this.reconcile(worldState);
       return;
     }
 

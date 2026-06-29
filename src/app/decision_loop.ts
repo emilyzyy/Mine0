@@ -17,6 +17,7 @@ import { makeId } from "../shared/ids.ts";
 import { appendJsonLine, isoNow } from "../shared/logger.ts";
 import { VerificationService } from "../verifier/verification_service.ts";
 import type { ProviderCallMeta } from "../planner/cerebras_client.ts";
+import { overrideCombatSubtaskIntent } from "../executor/jarvis_instruction.ts";
 
 export type PlanningMode = "greedy" | "multiverse";
 
@@ -24,6 +25,9 @@ export interface RunCycleInput {
   objective: string;
   executorKind: ExecutorKind;
   mode: PlanningMode;
+  // Bypasses the floor in loadPlannerConfig() — intended for JARVIS persistent
+  // demos where each step costs ~60-90 s of real Minecraft time.
+  maxDecisionSteps?: number;
 }
 
 export interface RunCycleHooks {
@@ -72,7 +76,9 @@ export class Mine0App {
         stopReason = "objective_already_satisfied";
       }
 
-      for (let stepNumber = 1; stepNumber <= this.config.maxDecisionSteps && !completedObjective; stepNumber += 1) {
+      const effectiveMaxSteps = input.maxDecisionSteps ?? this.config.maxDecisionSteps;
+
+      for (let stepNumber = 1; stepNumber <= effectiveMaxSteps && !completedObjective; stepNumber += 1) {
         const recentHistorySummary = buildRecentHistorySummary(steps);
         const perceptionStep = await this.perception.perceive(latestWorldState, input.executorKind);
         const worldState = parseWorldState({
@@ -92,7 +98,16 @@ export class Mine0App {
         );
         const selectedPlan = this.selectPlan(worldState, proposalStep.proposals);
         const plannedFuture = selectedPlan.future;
-        const selectedIntent = parseSubgoalIntent(this.toIntent(input.objective, plannedFuture));
+        let selectedIntent = parseSubgoalIntent(this.toIntent(input.objective, plannedFuture));
+        // For jarvis-persistent combat subtasks, replace abstract LLM instruction
+        // and oak_log successCondition with subtask-specific values.
+        if (input.executorKind === "jarvis-persistent") {
+          selectedIntent = overrideCombatSubtaskIntent(
+            selectedIntent,
+            taskContext.activeSubtask?.id ?? null,
+            input.objective,
+          );
+        }
         const actionOutcome = await executor.execute(selectedIntent, worldState);
         const verification = this.verifier.verify(plannedFuture, actionOutcome);
         const storedMemory = await this.memory.remember(
@@ -209,8 +224,8 @@ export class Mine0App {
         } else if (stalledStepCount >= this.config.maxStalledSteps) {
           stopReason = `stuck_no_meaningful_progress=${stalledStepCount}`;
           break;
-        } else if (stepNumber === this.config.maxDecisionSteps) {
-          stopReason = `safety_step_limit_reached=${this.config.maxDecisionSteps}`;
+        } else if (stepNumber === effectiveMaxSteps) {
+          stopReason = `safety_step_limit_reached=${effectiveMaxSteps}`;
         }
       }
 
@@ -313,10 +328,15 @@ export class Mine0App {
   private toIntent(objective: string, future: PredictedFuture): SubgoalIntent {
     return {
       objective,
-      instruction: future.predictedSteps[0]?.action ?? future.strategy,
+      // Use describeInstruction() so that single-token abstract LLM outputs like
+      // "visual_detection" are replaced with an action-derived sentence instead.
+      instruction: describeInstruction(future),
       candidateAction: future.candidateAction,
       successCondition: {
-        item: String(future.candidateAction.arguments.block_type ?? future.candidateAction.arguments.item ?? "oak_log"),
+        // Do not fall back to "oak_log" — use empty string so callers that override
+        // combat intent (overrideCombatSubtaskIntent) or non-resource actions can
+        // provide a meaningful value.
+        item: String(future.candidateAction.arguments.block_type ?? future.candidateAction.arguments.item ?? ""),
         count: Number(future.candidateAction.arguments.count ?? 1),
       },
       maximumSteps: future.candidateAction.name === "collect" ? 400 : 180,
@@ -427,7 +447,9 @@ function isMeaningfulProgress(
 
 function describeInstruction(future: PredictedFuture): string {
   const planned = future.predictedSteps[0]?.action;
-  if (planned) {
+  // Only use the LLM step text if it is a multi-word phrase; single-token outputs
+  // like "visual_detection" are too abstract to send to JARVIS as instructions.
+  if (planned && /\s/.test(planned)) {
     return planned;
   }
 

@@ -15,7 +15,7 @@ let currentRunState: {
   running: boolean;
   startedAt: string | null;
   objective: string | null;
-  executorKind: "jarvis" | "mineflayer" | null;
+  executorKind: "jarvis" | "jarvis-persistent" | "mineflayer" | null;
   mode: "greedy" | "multiverse" | null;
   completedObjective: boolean;
   stopReason: string | null;
@@ -125,7 +125,7 @@ const server = createServer(async (request, response) => {
       const raw = Buffer.concat(chunks).toString("utf8");
       const body = JSON.parse(raw) as {
         objective?: string;
-        executorKind?: "jarvis" | "mineflayer";
+        executorKind?: "jarvis" | "jarvis-persistent" | "mineflayer";
         mode?: "greedy" | "multiverse";
       };
 

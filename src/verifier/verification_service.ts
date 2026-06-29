@@ -106,6 +106,11 @@ export class VerificationService {
       suggestedFixes.add("change search direction, search depth, or frontier instead of repeating the same scan or explore.");
     }
 
+    if (failureReason.includes("repetitive_action_loop")) {
+      issueTags.add("repetitive_action_loop");
+      suggestedFixes.add("issue a more concrete movement or attack instruction instead of repeating the same low-level action; switch to the next subtask if the current one is stuck.");
+    }
+
     if (actualOutcome.status === "partial_success") {
       issueTags.add("partial_progress");
       suggestedFixes.add("continue from the updated state, but account for the unmet remainder of the subtask.");

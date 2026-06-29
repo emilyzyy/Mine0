@@ -11,7 +11,9 @@
     "start:x64": "scripts\\start-x64.cmd",
     "demo": "node --experimental-strip-types src/cli.ts",
     "demo:x64": "scripts\\demo-x64.cmd",
-    "eval": "node --experimental-strip-types src/evaluation/run_baseline.ts"
+    "eval": "node --experimental-strip-types src/evaluation/run_baseline.ts",
+    "jarvis:persistent": "node --experimental-strip-types src/cli_persistent.ts",
+    "jarvis:worker": "node --experimental-strip-types src/cli_worker.ts"
   },
   "engines": {
     "node": ">=24.0.0"

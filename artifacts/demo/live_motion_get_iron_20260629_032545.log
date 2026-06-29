@@ -1,0 +1,1486 @@
+
+> mine0@0.1.0 jarvis:persistent
+> node --experimental-strip-types src/cli_persistent.ts Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.
+
+Mine0 — JARVIS persistent executor
+  host            : root@194.68.245.71:22072
+  worker port     : 8765
+  env-config      : kill/kill_zombie
+  max-frames/goal : 60
+  reset on start  : false
+  planner         : cerebras / gemma-4-31b
+  max decisions   : 2  (MINE0_MAX_DECISION_STEPS, floor=1)
+  objective       : Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.
+---
+[jarvis-persistent] reset-on-start=false — probing worker for existing session…
+[jarvis-persistent] Reusing session: 6c862289 (cumulativeStep: 127)
+
+=== DecisionTrace ===
+{
+  "traceId": "trace_nup6buuj",
+  "objective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+  "executor": "JARVIS-VLA persistent (root@194.68.245.71:22072, worker :8765)",
+  "mode": "greedy",
+  "startedAt": "2026-06-29T07:25:47.694Z",
+  "completedObjective": false,
+  "stopReason": "safety_step_limit_reached=2",
+  "totalDecisions": 2,
+  "steps": [
+    {
+      "stepNumber": 1,
+      "taskContext": {
+        "rootObjective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+        "activeSubtask": {
+          "id": "locate_trees",
+          "description": "Explore the surface to find a forest or trees.",
+          "planningFocus": "visual search for wood blocks",
+          "compound": false,
+          "parentId": "goal",
+          "expectedAction": "explore",
+          "targetCount": 1,
+          "destination": "surface"
+        },
+        "pendingSubtasks": [
+          {
+            "id": "locate_trees",
+            "description": "Explore the surface to find a forest or trees.",
+            "planningFocus": "visual search for wood blocks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "collect_logs",
+            "description": "Collect oak logs from the located trees.",
+            "planningFocus": "inventory delta for logs",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "oak_log",
+            "targetCount": 3
+          },
+          {
+            "id": "craft_planks",
+            "description": "Craft wooden planks from logs.",
+            "planningFocus": "inventory delta for planks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "planks",
+            "targetCount": 12
+          },
+          {
+            "id": "place_crafting_table",
+            "description": "Place a crafting table to enable tool crafting.",
+            "planningFocus": "visual confirmation of placed block",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "place",
+            "targetItem": "crafting_table",
+            "targetCount": 1
+          },
+          {
+            "id": "craft_sticks",
+            "description": "Craft sticks from planks.",
+            "planningFocus": "inventory delta for sticks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stick",
+            "targetCount": 4
+          },
+          {
+            "id": "craft_wooden_pickaxe",
+            "description": "Craft a wooden pickaxe using the crafting table.",
+            "planningFocus": "inventory delta for wooden_pickaxe",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "wooden_pickaxe",
+            "targetCount": 1
+          },
+          {
+            "id": "locate_stone",
+            "description": "Explore the surface or nearby cliffs to find exposed stone.",
+            "planningFocus": "visual search for stone blocks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "collect_cobblestone",
+            "description": "Mine stone to obtain cobblestone.",
+            "planningFocus": "inventory delta for cobblestone",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "cobblestone",
+            "targetCount": 11
+          },
+          {
+            "id": "craft_stone_pickaxe",
+            "description": "Craft a stone pickaxe for efficient iron mining.",
+            "planningFocus": "inventory delta for stone_pickaxe",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stone_pickaxe",
+            "targetCount": 1
+          },
+          {
+            "id": "equip_stone_pickaxe",
+            "description": "Equip the stone pickaxe in the main hand.",
+            "planningFocus": "visual confirmation of held item",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "equip",
+            "targetItem": "stone_pickaxe",
+            "targetCount": 1
+          },
+          {
+            "id": "locate_iron_ore",
+            "description": "Explore subterranean areas or surface outcrops to find iron ore.",
+            "planningFocus": "visual search for iron_ore blocks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "subterranean"
+          },
+          {
+            "id": "collect_iron_ore",
+            "description": "Mine iron ore using the stone pickaxe.",
+            "planningFocus": "inventory delta for iron_ore",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "iron_ore",
+            "targetCount": 1
+          }
+        ],
+        "completedSubtasks": [],
+        "taskTree": {
+          "id": "goal",
+          "description": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+          "planningFocus": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+          "status": "active",
+          "children": [
+            {
+              "id": "locate_trees",
+              "description": "Explore the surface to find a forest or trees.",
+              "planningFocus": "visual search for wood blocks",
+              "status": "active",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_logs",
+              "description": "Collect oak logs from the located trees.",
+              "planningFocus": "inventory delta for logs",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "craft_planks",
+              "description": "Craft wooden planks from logs.",
+              "planningFocus": "inventory delta for planks",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "place_crafting_table",
+              "description": "Place a crafting table to enable tool crafting.",
+              "planningFocus": "visual confirmation of placed block",
+              "status": "pending",
+              "expectedAction": "place",
+              "children": []
+            },
+            {
+              "id": "craft_sticks",
+              "description": "Craft sticks from planks.",
+              "planningFocus": "inventory delta for sticks",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "craft_wooden_pickaxe",
+              "description": "Craft a wooden pickaxe using the crafting table.",
+              "planningFocus": "inventory delta for wooden_pickaxe",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "locate_stone",
+              "description": "Explore the surface or nearby cliffs to find exposed stone.",
+              "planningFocus": "visual search for stone blocks",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_cobblestone",
+              "description": "Mine stone to obtain cobblestone.",
+              "planningFocus": "inventory delta for cobblestone",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "craft_stone_pickaxe",
+              "description": "Craft a stone pickaxe for efficient iron mining.",
+              "planningFocus": "inventory delta for stone_pickaxe",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "equip_stone_pickaxe",
+              "description": "Equip the stone pickaxe in the main hand.",
+              "planningFocus": "visual confirmation of held item",
+              "status": "pending",
+              "expectedAction": "equip",
+              "children": []
+            },
+            {
+              "id": "locate_iron_ore",
+              "description": "Explore subterranean areas or surface outcrops to find iron ore.",
+              "planningFocus": "visual search for iron_ore blocks",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_iron_ore",
+              "description": "Mine iron ore using the stone pickaxe.",
+              "planningFocus": "inventory delta for iron_ore",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            }
+          ]
+        }
+      },
+      "worldState": {
+        "timestamp": "2026-06-29T07:25:47.695Z",
+        "userObjective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+        "position": {
+          "x": 0,
+          "y": 64,
+          "z": 0
+        },
+        "biomeOrRegionHint": "unknown",
+        "health": 20,
+        "hunger": 20,
+        "inventory": [],
+        "equippedItem": "air",
+        "timeOfDay": "day",
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleHazards": [],
+        "perceivedResources": [],
+        "nearbyBlocks": [],
+        "nearbyEntities": [],
+        "lineOfSightTarget": null,
+        "interactionHints": [],
+        "goalProgress": 0.99
+      },
+      "perception": {
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleResources": [],
+        "terrainAffordances": [
+          "open_grass_path",
+          "reachable_tree_line",
+          "nearby_slope"
+        ],
+        "hazards": [
+          "none_immediate"
+        ],
+        "reachableTargets": [
+          "scan_for_resources"
+        ],
+        "confidenceNotes": [
+          "Perception is derived from Mineflayer structured state only.",
+          "Planner receives structured Mineflayer cues for nearby blocks, entities, line of sight, and interaction affordances."
+        ]
+      },
+      "memorySummary": [
+        "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore."
+      ],
+      "plannedFuture": {
+        "branchId": "plan_31nfuvg0",
+        "strategy": "Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "north",
+            "location": "surface"
+          },
+          "reason": "The active subtask is to explore the surface for trees. No trees are currently visible in the immediate vicinity, and the previous search was stagnant, so I am moving in a new direction (north) to find a forest."
+        },
+        "preconditions": [
+          "target is reachable",
+          "step budget remains bounded"
+        ],
+        "predictedSteps": [
+          {
+            "action": "Explore the surface to find a forest or trees.",
+            "expectedResult": "Progress toward log."
+          },
+          {
+            "action": "verify outcome",
+            "expectedResult": "Inventory and scene should reflect the expected change."
+          }
+        ],
+        "successProbability": 0.76,
+        "estimatedSeconds": 14,
+        "risk": 0.09,
+        "resourceCost": 0,
+        "goalProgress": 0.12,
+        "likelyNextObservation": "Positioning should improve for the next action."
+      },
+      "selectedIntent": {
+        "objective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+        "instruction": "Explore the surface to find a forest or trees.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "north",
+            "location": "surface"
+          },
+          "reason": "The active subtask is to explore the surface for trees. No trees are currently visible in the immediate vicinity, and the previous search was stagnant, so I am moving in a new direction (north) to find a forest."
+        },
+        "successCondition": {
+          "item": "log",
+          "count": 1
+        },
+        "maximumSteps": 180
+      },
+      "actionOutcome": {
+        "executedAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "north",
+            "location": "surface"
+          },
+          "reason": "The active subtask is to explore the surface for trees. No trees are currently visible in the immediate vicinity, and the previous search was stagnant, so I am moving in a new direction (north) to find a forest."
+        },
+        "status": "partial_success",
+        "durationSeconds": 31.3,
+        "inventoryDelta": [],
+        "healthDelta": 0,
+        "hungerDelta": 0,
+        "positionDelta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "visualVerification": {
+          "targetReached": false,
+          "terrainChangedAsExpected": false,
+          "hazardPresent": false
+        },
+        "failureReason": null,
+        "executor": "jarvis-persistent"
+      },
+      "verification": {
+        "predictionError": 1,
+        "matchedExpectation": false,
+        "notes": [
+          "predicted_item_gain=1",
+          "actual_item_gain=0",
+          "status=partial_success"
+        ],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ]
+      },
+      "storedMemory": {
+        "id": "memory_zg3gyflx",
+        "objective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+        "actionType": "explore",
+        "environmentTags": [
+          "unknown",
+          "day"
+        ],
+        "failureType": null,
+        "hazardContext": [],
+        "resourceContext": [],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ],
+        "predictionError": 1,
+        "predictedFuture": {
+          "branchId": "plan_31nfuvg0",
+          "strategy": "Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.",
+          "candidateAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "north",
+              "location": "surface"
+            },
+            "reason": "The active subtask is to explore the surface for trees. No trees are currently visible in the immediate vicinity, and the previous search was stagnant, so I am moving in a new direction (north) to find a forest."
+          },
+          "preconditions": [
+            "target is reachable",
+            "step budget remains bounded"
+          ],
+          "predictedSteps": [
+            {
+              "action": "Explore the surface to find a forest or trees.",
+              "expectedResult": "Progress toward log."
+            },
+            {
+              "action": "verify outcome",
+              "expectedResult": "Inventory and scene should reflect the expected change."
+            }
+          ],
+          "successProbability": 0.76,
+          "estimatedSeconds": 14,
+          "risk": 0.09,
+          "resourceCost": 0,
+          "goalProgress": 0.12,
+          "likelyNextObservation": "Positioning should improve for the next action."
+        },
+        "actualOutcome": {
+          "executedAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "north",
+              "location": "surface"
+            },
+            "reason": "The active subtask is to explore the surface for trees. No trees are currently visible in the immediate vicinity, and the previous search was stagnant, so I am moving in a new direction (north) to find a forest."
+          },
+          "status": "partial_success",
+          "durationSeconds": 31.3,
+          "inventoryDelta": [],
+          "healthDelta": 0,
+          "hungerDelta": 0,
+          "positionDelta": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "visualVerification": {
+            "targetReached": false,
+            "terrainChangedAsExpected": false,
+            "hazardPresent": false
+          },
+          "failureReason": null,
+          "executor": "jarvis-persistent"
+        },
+        "createdAt": "2026-06-29T07:26:21.865Z"
+      },
+      "planner": {
+        "callLog": [
+          {
+            "label": "perception_local",
+            "provider": "mock",
+            "model": "structured-local",
+            "status": "skipped",
+            "latencyMs": 0,
+            "usage": null,
+            "timeInfo": null,
+            "warning": "Model perception disabled to conserve tokens; using Mineflayer structured state."
+          },
+          {
+            "label": "planner",
+            "provider": "cerebras",
+            "model": "gemma-4-31b",
+            "status": "success",
+            "latencyMs": 352,
+            "usage": {
+              "promptTokens": 1259,
+              "completionTokens": 168,
+              "totalTokens": 1427
+            },
+            "timeInfo": {
+              "created": 1782717948.704501,
+              "queue_time": 0.002935679,
+              "prompt_time": 0.022078324,
+              "completion_time": 0.111249674,
+              "total_time": 0.13782882690429688
+            },
+            "warning": null
+          }
+        ],
+        "proposals": [
+          {
+            "plannerId": "jarvis_vla_planner",
+            "strategy": "Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.",
+            "instruction": "Explore the surface to find a forest or trees.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "north",
+                "location": "surface"
+              },
+              "reason": "The active subtask is to explore the surface for trees. No trees are currently visible in the immediate vicinity, and the previous search was stagnant, so I am moving in a new direction (north) to find a forest."
+            }
+          }
+        ],
+        "scoredBranches": [
+          {
+            "branchId": "plan_31nfuvg0",
+            "strategy": "Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "north",
+                "location": "surface"
+              },
+              "reason": "The active subtask is to explore the surface for trees. No trees are currently visible in the immediate vicinity, and the previous search was stagnant, so I am moving in a new direction (north) to find a forest."
+            },
+            "score": 0,
+            "successProbability": 0.76,
+            "estimatedSeconds": 14,
+            "risk": 0.09,
+            "goalProgress": 0.12,
+            "notes": [
+              "single_decision_mode=true",
+              "selected_first_proposal=true"
+            ]
+          }
+        ],
+        "selectedBranchId": "plan_31nfuvg0"
+      }
+    },
+    {
+      "stepNumber": 2,
+      "taskContext": {
+        "rootObjective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+        "activeSubtask": {
+          "id": "locate_trees",
+          "description": "Explore the surface to find a forest or trees.",
+          "planningFocus": "visual search for wood blocks",
+          "compound": false,
+          "parentId": "goal",
+          "expectedAction": "explore",
+          "targetCount": 1,
+          "destination": "surface"
+        },
+        "pendingSubtasks": [
+          {
+            "id": "locate_trees",
+            "description": "Explore the surface to find a forest or trees.",
+            "planningFocus": "visual search for wood blocks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "collect_logs",
+            "description": "Collect oak logs from the located trees.",
+            "planningFocus": "inventory delta for logs",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "oak_log",
+            "targetCount": 3
+          },
+          {
+            "id": "craft_planks",
+            "description": "Craft wooden planks from logs.",
+            "planningFocus": "inventory delta for planks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "planks",
+            "targetCount": 12
+          },
+          {
+            "id": "place_crafting_table",
+            "description": "Place a crafting table to enable tool crafting.",
+            "planningFocus": "visual confirmation of placed block",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "place",
+            "targetItem": "crafting_table",
+            "targetCount": 1
+          },
+          {
+            "id": "craft_sticks",
+            "description": "Craft sticks from planks.",
+            "planningFocus": "inventory delta for sticks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stick",
+            "targetCount": 4
+          },
+          {
+            "id": "craft_wooden_pickaxe",
+            "description": "Craft a wooden pickaxe using the crafting table.",
+            "planningFocus": "inventory delta for wooden_pickaxe",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "wooden_pickaxe",
+            "targetCount": 1
+          },
+          {
+            "id": "locate_stone",
+            "description": "Explore the surface or nearby cliffs to find exposed stone.",
+            "planningFocus": "visual search for stone blocks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "surface"
+          },
+          {
+            "id": "collect_cobblestone",
+            "description": "Mine stone to obtain cobblestone.",
+            "planningFocus": "inventory delta for cobblestone",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "cobblestone",
+            "targetCount": 11
+          },
+          {
+            "id": "craft_stone_pickaxe",
+            "description": "Craft a stone pickaxe for efficient iron mining.",
+            "planningFocus": "inventory delta for stone_pickaxe",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "craft",
+            "targetItem": "stone_pickaxe",
+            "targetCount": 1
+          },
+          {
+            "id": "equip_stone_pickaxe",
+            "description": "Equip the stone pickaxe in the main hand.",
+            "planningFocus": "visual confirmation of held item",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "equip",
+            "targetItem": "stone_pickaxe",
+            "targetCount": 1
+          },
+          {
+            "id": "locate_iron_ore",
+            "description": "Explore subterranean areas or surface outcrops to find iron ore.",
+            "planningFocus": "visual search for iron_ore blocks",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "explore",
+            "targetCount": 1,
+            "destination": "subterranean"
+          },
+          {
+            "id": "collect_iron_ore",
+            "description": "Mine iron ore using the stone pickaxe.",
+            "planningFocus": "inventory delta for iron_ore",
+            "compound": false,
+            "parentId": "goal",
+            "expectedAction": "collect",
+            "targetItem": "iron_ore",
+            "targetCount": 1
+          }
+        ],
+        "completedSubtasks": [],
+        "taskTree": {
+          "id": "goal",
+          "description": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+          "planningFocus": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+          "status": "active",
+          "children": [
+            {
+              "id": "locate_trees",
+              "description": "Explore the surface to find a forest or trees.",
+              "planningFocus": "visual search for wood blocks",
+              "status": "active",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_logs",
+              "description": "Collect oak logs from the located trees.",
+              "planningFocus": "inventory delta for logs",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "craft_planks",
+              "description": "Craft wooden planks from logs.",
+              "planningFocus": "inventory delta for planks",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "place_crafting_table",
+              "description": "Place a crafting table to enable tool crafting.",
+              "planningFocus": "visual confirmation of placed block",
+              "status": "pending",
+              "expectedAction": "place",
+              "children": []
+            },
+            {
+              "id": "craft_sticks",
+              "description": "Craft sticks from planks.",
+              "planningFocus": "inventory delta for sticks",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "craft_wooden_pickaxe",
+              "description": "Craft a wooden pickaxe using the crafting table.",
+              "planningFocus": "inventory delta for wooden_pickaxe",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "locate_stone",
+              "description": "Explore the surface or nearby cliffs to find exposed stone.",
+              "planningFocus": "visual search for stone blocks",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_cobblestone",
+              "description": "Mine stone to obtain cobblestone.",
+              "planningFocus": "inventory delta for cobblestone",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            },
+            {
+              "id": "craft_stone_pickaxe",
+              "description": "Craft a stone pickaxe for efficient iron mining.",
+              "planningFocus": "inventory delta for stone_pickaxe",
+              "status": "pending",
+              "expectedAction": "craft",
+              "children": []
+            },
+            {
+              "id": "equip_stone_pickaxe",
+              "description": "Equip the stone pickaxe in the main hand.",
+              "planningFocus": "visual confirmation of held item",
+              "status": "pending",
+              "expectedAction": "equip",
+              "children": []
+            },
+            {
+              "id": "locate_iron_ore",
+              "description": "Explore subterranean areas or surface outcrops to find iron ore.",
+              "planningFocus": "visual search for iron_ore blocks",
+              "status": "pending",
+              "expectedAction": "explore",
+              "children": []
+            },
+            {
+              "id": "collect_iron_ore",
+              "description": "Mine iron ore using the stone pickaxe.",
+              "planningFocus": "inventory delta for iron_ore",
+              "status": "pending",
+              "expectedAction": "collect",
+              "children": []
+            }
+          ]
+        }
+      },
+      "worldState": {
+        "timestamp": "2026-06-29T07:26:21.866Z",
+        "userObjective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+        "position": {
+          "x": 0,
+          "y": 64,
+          "z": 0
+        },
+        "biomeOrRegionHint": "unknown",
+        "health": 20,
+        "hunger": 20,
+        "inventory": [],
+        "equippedItem": "air",
+        "timeOfDay": "day",
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleHazards": [],
+        "perceivedResources": [],
+        "nearbyBlocks": [],
+        "nearbyEntities": [],
+        "lineOfSightTarget": null,
+        "interactionHints": [],
+        "goalProgress": 0.99
+      },
+      "perception": {
+        "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+        "visibleResources": [],
+        "terrainAffordances": [
+          "open_grass_path",
+          "reachable_tree_line",
+          "nearby_slope"
+        ],
+        "hazards": [
+          "none_immediate"
+        ],
+        "reachableTargets": [
+          "scan_for_resources"
+        ],
+        "confidenceNotes": [
+          "Perception is derived from Mineflayer structured state only.",
+          "Planner receives structured Mineflayer cues for nearby blocks, entities, line of sight, and interaction affordances."
+        ]
+      },
+      "memorySummary": [
+        "explore previously degraded with prediction_error=1.00 in Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+        "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore."
+      ],
+      "plannedFuture": {
+        "branchId": "plan_nx64ulpc",
+        "strategy": "Change search direction to avoid stagnant search loop and find trees on the surface.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+        },
+        "preconditions": [
+          "target is reachable",
+          "step budget remains bounded"
+        ],
+        "predictedSteps": [
+          {
+            "action": "Explore the surface in a new direction to locate a forest or trees.",
+            "expectedResult": "Progress toward log."
+          },
+          {
+            "action": "verify outcome",
+            "expectedResult": "Inventory and scene should reflect the expected change."
+          }
+        ],
+        "successProbability": 0.76,
+        "estimatedSeconds": 14,
+        "risk": 0.09,
+        "resourceCost": 0,
+        "goalProgress": 0.12,
+        "likelyNextObservation": "Positioning should improve for the next action."
+      },
+      "selectedIntent": {
+        "objective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+        "instruction": "Explore the surface in a new direction to locate a forest or trees.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+        },
+        "successCondition": {
+          "item": "log",
+          "count": 1
+        },
+        "maximumSteps": 180
+      },
+      "actionOutcome": {
+        "executedAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+        },
+        "status": "partial_success",
+        "durationSeconds": 38.4,
+        "inventoryDelta": [],
+        "healthDelta": 0,
+        "hungerDelta": 0,
+        "positionDelta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "visualVerification": {
+          "targetReached": false,
+          "terrainChangedAsExpected": false,
+          "hazardPresent": false
+        },
+        "failureReason": null,
+        "executor": "jarvis-persistent"
+      },
+      "verification": {
+        "predictionError": 1,
+        "matchedExpectation": false,
+        "notes": [
+          "predicted_item_gain=1",
+          "actual_item_gain=0",
+          "status=partial_success"
+        ],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ]
+      },
+      "storedMemory": {
+        "id": "memory_46n3nmsr",
+        "objective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+        "actionType": "explore",
+        "environmentTags": [
+          "unknown",
+          "day"
+        ],
+        "failureType": null,
+        "hazardContext": [],
+        "resourceContext": [],
+        "issueTags": [
+          "stagnant_search",
+          "partial_progress"
+        ],
+        "suggestedFixes": [
+          "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+          "continue from the updated state, but account for the unmet remainder of the subtask."
+        ],
+        "predictionError": 1,
+        "predictedFuture": {
+          "branchId": "plan_nx64ulpc",
+          "strategy": "Change search direction to avoid stagnant search loop and find trees on the surface.",
+          "candidateAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "east",
+              "location": "surface"
+            },
+            "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+          },
+          "preconditions": [
+            "target is reachable",
+            "step budget remains bounded"
+          ],
+          "predictedSteps": [
+            {
+              "action": "Explore the surface in a new direction to locate a forest or trees.",
+              "expectedResult": "Progress toward log."
+            },
+            {
+              "action": "verify outcome",
+              "expectedResult": "Inventory and scene should reflect the expected change."
+            }
+          ],
+          "successProbability": 0.76,
+          "estimatedSeconds": 14,
+          "risk": 0.09,
+          "resourceCost": 0,
+          "goalProgress": 0.12,
+          "likelyNextObservation": "Positioning should improve for the next action."
+        },
+        "actualOutcome": {
+          "executedAction": {
+            "name": "explore",
+            "arguments": {
+              "block_type": "log",
+              "item": "log",
+              "count": 1,
+              "direction": "east",
+              "location": "surface"
+            },
+            "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+          },
+          "status": "partial_success",
+          "durationSeconds": 38.4,
+          "inventoryDelta": [],
+          "healthDelta": 0,
+          "hungerDelta": 0,
+          "positionDelta": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "visualVerification": {
+            "targetReached": false,
+            "terrainChangedAsExpected": false,
+            "hazardPresent": false
+          },
+          "failureReason": null,
+          "executor": "jarvis-persistent"
+        },
+        "createdAt": "2026-06-29T07:27:02.217Z"
+      },
+      "planner": {
+        "callLog": [
+          {
+            "label": "perception_local",
+            "provider": "mock",
+            "model": "structured-local",
+            "status": "skipped",
+            "latencyMs": 0,
+            "usage": null,
+            "timeInfo": null,
+            "warning": "Model perception disabled to conserve tokens; using Mineflayer structured state."
+          },
+          {
+            "label": "planner",
+            "provider": "cerebras",
+            "model": "gemma-4-31b",
+            "status": "success",
+            "latencyMs": 323,
+            "usage": {
+              "promptTokens": 1335,
+              "completionTokens": 133,
+              "totalTokens": 1468
+            },
+            "timeInfo": {
+              "created": 1782717982.0382082,
+              "queue_time": 0.00280039,
+              "prompt_time": 0.011814823,
+              "completion_time": 0.083647648,
+              "total_time": 0.09971928596496582
+            },
+            "warning": null
+          }
+        ],
+        "proposals": [
+          {
+            "plannerId": "mine0_planner",
+            "strategy": "Change search direction to avoid stagnant search loop and find trees on the surface.",
+            "instruction": "Explore the surface in a new direction to locate a forest or trees.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "east",
+                "location": "surface"
+              },
+              "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+            }
+          }
+        ],
+        "scoredBranches": [
+          {
+            "branchId": "plan_nx64ulpc",
+            "strategy": "Change search direction to avoid stagnant search loop and find trees on the surface.",
+            "candidateAction": {
+              "name": "explore",
+              "arguments": {
+                "block_type": "log",
+                "item": "log",
+                "count": 1,
+                "direction": "east",
+                "location": "surface"
+              },
+              "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+            },
+            "score": 0,
+            "successProbability": 0.76,
+            "estimatedSeconds": 14,
+            "risk": 0.09,
+            "goalProgress": 0.12,
+            "notes": [
+              "single_decision_mode=true",
+              "selected_first_proposal=true"
+            ]
+          }
+        ],
+        "selectedBranchId": "plan_nx64ulpc"
+      }
+    }
+  ],
+  "worldState": {
+    "timestamp": "2026-06-29T07:26:21.866Z",
+    "userObjective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+    "position": {
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "biomeOrRegionHint": "unknown",
+    "health": 20,
+    "hunger": 20,
+    "inventory": [],
+    "equippedItem": "air",
+    "timeOfDay": "day",
+    "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+    "visibleHazards": [],
+    "perceivedResources": [],
+    "nearbyBlocks": [],
+    "nearbyEntities": [],
+    "lineOfSightTarget": null,
+    "interactionHints": [],
+    "goalProgress": 0.99
+  },
+  "perception": {
+    "sceneSummary": "Line of sight target: none. Nearby blocks: none identified. Nearby entities: none nearby.",
+    "visibleResources": [],
+    "terrainAffordances": [
+      "open_grass_path",
+      "reachable_tree_line",
+      "nearby_slope"
+    ],
+    "hazards": [
+      "none_immediate"
+    ],
+    "reachableTargets": [
+      "scan_for_resources"
+    ],
+    "confidenceNotes": [
+      "Perception is derived from Mineflayer structured state only.",
+      "Planner receives structured Mineflayer cues for nearby blocks, entities, line of sight, and interaction affordances."
+    ]
+  },
+  "memorySummary": [
+    "explore previously degraded with prediction_error=1.00 in Move forward across the surface to locate a forest or trees as per the active subtask, changing direction to avoid previous stagnant search patterns.. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+    "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+    "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+    "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+    "explore previously degraded with prediction_error=1.00 in move to a new search frontier for the active subtask. issue_tags=stagnant_search,partial_progress. suggested_fix=change search direction, search depth, or frontier instead of repeating the same scan or explore."
+  ],
+  "plannedFuture": {
+    "branchId": "plan_nx64ulpc",
+    "strategy": "Change search direction to avoid stagnant search loop and find trees on the surface.",
+    "candidateAction": {
+      "name": "explore",
+      "arguments": {
+        "block_type": "log",
+        "item": "log",
+        "count": 1,
+        "direction": "east",
+        "location": "surface"
+      },
+      "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+    },
+    "preconditions": [
+      "target is reachable",
+      "step budget remains bounded"
+    ],
+    "predictedSteps": [
+      {
+        "action": "Explore the surface in a new direction to locate a forest or trees.",
+        "expectedResult": "Progress toward log."
+      },
+      {
+        "action": "verify outcome",
+        "expectedResult": "Inventory and scene should reflect the expected change."
+      }
+    ],
+    "successProbability": 0.76,
+    "estimatedSeconds": 14,
+    "risk": 0.09,
+    "resourceCost": 0,
+    "goalProgress": 0.12,
+    "likelyNextObservation": "Positioning should improve for the next action."
+  },
+  "selectedIntent": {
+    "objective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+    "instruction": "Explore the surface in a new direction to locate a forest or trees.",
+    "candidateAction": {
+      "name": "explore",
+      "arguments": {
+        "block_type": "log",
+        "item": "log",
+        "count": 1,
+        "direction": "east",
+        "location": "surface"
+      },
+      "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+    },
+    "successCondition": {
+      "item": "log",
+      "count": 1
+    },
+    "maximumSteps": 180
+  },
+  "actionOutcome": {
+    "executedAction": {
+      "name": "explore",
+      "arguments": {
+        "block_type": "log",
+        "item": "log",
+        "count": 1,
+        "direction": "east",
+        "location": "surface"
+      },
+      "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+    },
+    "status": "partial_success",
+    "durationSeconds": 38.4,
+    "inventoryDelta": [],
+    "healthDelta": 0,
+    "hungerDelta": 0,
+    "positionDelta": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "visualVerification": {
+      "targetReached": false,
+      "terrainChangedAsExpected": false,
+      "hazardPresent": false
+    },
+    "failureReason": null,
+    "executor": "jarvis-persistent"
+  },
+  "verification": {
+    "predictionError": 1,
+    "matchedExpectation": false,
+    "notes": [
+      "predicted_item_gain=1",
+      "actual_item_gain=0",
+      "status=partial_success"
+    ],
+    "issueTags": [
+      "stagnant_search",
+      "partial_progress"
+    ],
+    "suggestedFixes": [
+      "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+      "continue from the updated state, but account for the unmet remainder of the subtask."
+    ]
+  },
+  "storedMemory": {
+    "id": "memory_46n3nmsr",
+    "objective": "Begin mining iron by moving across the surface, looking around for trees and stone. Keep moving forward and scanning, do not stand still.",
+    "actionType": "explore",
+    "environmentTags": [
+      "unknown",
+      "day"
+    ],
+    "failureType": null,
+    "hazardContext": [],
+    "resourceContext": [],
+    "issueTags": [
+      "stagnant_search",
+      "partial_progress"
+    ],
+    "suggestedFixes": [
+      "change search direction, search depth, or frontier instead of repeating the same scan or explore.",
+      "continue from the updated state, but account for the unmet remainder of the subtask."
+    ],
+    "predictionError": 1,
+    "predictedFuture": {
+      "branchId": "plan_nx64ulpc",
+      "strategy": "Change search direction to avoid stagnant search loop and find trees on the surface.",
+      "candidateAction": {
+        "name": "explore",
+        "arguments": {
+          "block_type": "log",
+          "item": "log",
+          "count": 1,
+          "direction": "east",
+          "location": "surface"
+        },
+        "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+      },
+      "preconditions": [
+        "target is reachable",
+        "step budget remains bounded"
+      ],
+      "predictedSteps": [
+        {
+          "action": "Explore the surface in a new direction to locate a forest or trees.",
+          "expectedResult": "Progress toward log."
+        },
+        {
+          "action": "verify outcome",
+          "expectedResult": "Inventory and scene should reflect the expected change."
+        }
+      ],
+      "successProbability": 0.76,
+      "estimatedSeconds": 14,
+      "risk": 0.09,
+      "resourceCost": 0,
+      "goalProgress": 0.12,
+      "likelyNextObservation": "Positioning should improve for the next action."
+    },
+    "actualOutcome": {
+      "executedAction": {
+        "name": "explore",
+        "arguments": {
+          "block_type": "log",
+          "item": "log",
+          "count": 1,
+          "direction": "east",
+          "location": "surface"
+        },
+        "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+      },
+      "status": "partial_success",
+      "durationSeconds": 38.4,
+      "inventoryDelta": [],
+      "healthDelta": 0,
+      "hungerDelta": 0,
+      "positionDelta": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "visualVerification": {
+        "targetReached": false,
+        "terrainChangedAsExpected": false,
+        "hazardPresent": false
+      },
+      "failureReason": null,
+      "executor": "jarvis-persistent"
+    },
+    "createdAt": "2026-06-29T07:27:02.217Z"
+  },
+  "planner": {
+    "providerMode": "cerebras",
+    "configuredModel": "gemma-4-31b",
+    "callLog": [
+      {
+        "label": "perception_local",
+        "provider": "mock",
+        "model": "structured-local",
+        "status": "skipped",
+        "latencyMs": 0,
+        "usage": null,
+        "timeInfo": null,
+        "warning": "Model perception disabled to conserve tokens; using Mineflayer structured state."
+      },
+      {
+        "label": "planner",
+        "provider": "cerebras",
+        "model": "gemma-4-31b",
+        "status": "success",
+        "latencyMs": 323,
+        "usage": {
+          "promptTokens": 1335,
+          "completionTokens": 133,
+          "totalTokens": 1468
+        },
+        "timeInfo": {
+          "created": 1782717982.0382082,
+          "queue_time": 0.00280039,
+          "prompt_time": 0.011814823,
+          "completion_time": 0.083647648,
+          "total_time": 0.09971928596496582
+        },
+        "warning": null
+      }
+    ],
+    "proposals": [
+      {
+        "plannerId": "mine0_planner",
+        "strategy": "Change search direction to avoid stagnant search loop and find trees on the surface.",
+        "instruction": "Explore the surface in a new direction to locate a forest or trees.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+        }
+      }
+    ],
+    "scoredBranches": [
+      {
+        "branchId": "plan_nx64ulpc",
+        "strategy": "Change search direction to avoid stagnant search loop and find trees on the surface.",
+        "candidateAction": {
+          "name": "explore",
+          "arguments": {
+            "block_type": "log",
+            "item": "log",
+            "count": 1,
+            "direction": "east",
+            "location": "surface"
+          },
+          "reason": "Previous exploration to the north resulted in no movement or target acquisition; changing direction to east to find trees."
+        },
+        "score": 0,
+        "successProbability": 0.76,
+        "estimatedSeconds": 14,
+        "risk": 0.09,
+        "goalProgress": 0.12,
+        "notes": [
+          "single_decision_mode=true",
+          "selected_first_proposal=true"
+        ]
+      }
+    ],
+    "selectedBranchId": "plan_nx64ulpc"
+  }
+}
+
+=== JARVIS Persistent Artifacts (last step) ===
+  sessionId              : 6c862289
+  reusedSession          : true
+  cumulativeStepBefore   : 187
+  cumulativeStepAfter    : 247
+  remoteExecutionSucceeded: true
+  taskSucceeded          : null (no reward signal)
+  actionCount            : 60
+  durationSeconds        : 38.4
+  latestScreenshotPath   : /workspace/JarvisVLA/mine0_persistent/latest_pov.png
+  actions (first 5):
+    {"buttons":1,"camera":219}
+    {"buttons":1,"camera":219}
+    {"buttons":1,"camera":219}
+    {"buttons":1,"camera":219}
+    {"buttons":1,"camera":219}

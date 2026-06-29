@@ -1,6 +1,6 @@
 import type { ActionOutcome, SubgoalIntent, WorldState } from "../contracts/index.ts";
 
-export type ExecutorKind = "jarvis" | "mineflayer";
+export type ExecutorKind = "jarvis" | "jarvis-persistent" | "mineflayer";
 
 export interface ExecutorObservation {
   worldState: WorldState;

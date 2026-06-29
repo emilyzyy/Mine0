@@ -17,6 +17,53 @@ function readBoolean(value: string | undefined, fallback: boolean): boolean {
   return value === "1" || value.toLowerCase() === "true";
 }
 
+function expandHome(value: string): string {
+  return value.startsWith("~/") ? `${process.env["HOME"] ?? "~"}/${value.slice(2)}` : value;
+}
+
+// ---------------------------------------------------------------------------
+// JARVIS / RunPod config
+// ---------------------------------------------------------------------------
+
+export interface JarvisConfig {
+  host: string;
+  port: number;
+  user: string;
+  keyPath: string;
+  remoteRepo: string;
+  baseUrl: string;
+  checkpoints: string;
+  envConfig: string;
+  maxFrames: number;
+  temperature: number;
+  videoFold: string;
+  workerPort: number;
+  resetOnStart: boolean;
+}
+
+export function loadJarvisConfig(): JarvisConfig {
+  loadLocalEnv();
+  return {
+    host:        process.env["RUNPOD_HOST"]?.trim()         ?? "194.68.245.71",
+    port:        readNumber(process.env["RUNPOD_PORT"],        22072),
+    user:        process.env["RUNPOD_USER"]?.trim()         ?? "root",
+    keyPath:     expandHome(process.env["RUNPOD_KEY_PATH"]?.trim() ?? "~/.ssh/id_ed25519"),
+    remoteRepo:  process.env["JARVIS_REMOTE_REPO"]?.trim()  ?? "/workspace/JarvisVLA",
+    baseUrl:     process.env["JARVIS_BASE_URL"]?.trim()     ?? "http://127.0.0.1:8000/v1",
+    checkpoints: process.env["JARVIS_CHECKPOINTS"]?.trim()  ?? "CraftJarvis/JarvisVLA-Qwen2-VL-7B",
+    envConfig:   process.env["JARVIS_ENV_CONFIG"]?.trim()   ?? "kill/kill_zombie",
+    maxFrames:   readNumber(process.env["JARVIS_MAX_FRAMES"],  2),
+    temperature: Math.max(0, Math.min(1, readNumber(process.env["JARVIS_TEMPERATURE"], 0.01))),
+    videoFold:   process.env["JARVIS_VIDEO_FOLD"]?.trim()   ?? "logs/tiny",
+    workerPort:  readNumber(process.env["JARVIS_WORKER_PORT"], 8765),
+    resetOnStart: readBoolean(process.env["JARVIS_PERSISTENT_RESET_ON_START"], true),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Planner / Mine0 app config
+// ---------------------------------------------------------------------------
+
 export interface PlannerConfig {
   provider: "mock" | "cerebras";
   apiKey: string | null;

@@ -34,12 +34,22 @@ export function worldStatePrompt(worldState: WorldState): string {
   );
 }
 
+function isJarvisRoute(executorKind: ExecutorKind): boolean {
+  return executorKind === "jarvis" || executorKind === "jarvis-persistent";
+}
+
+const COMBAT_OBJECTIVE_RE = /\b(zombie|zombies|attack|fight|kill|sword|mob|hostile|combat)\b/i;
+
+function isCombatObjective(objective: string): boolean {
+  return COMBAT_OBJECTIVE_RE.test(objective);
+}
+
 function executorRouteLabel(executorKind: ExecutorKind): string {
-  return executorKind === "jarvis" ? "JARVIS-VLA visual-control route" : "Mineflayer structured-control route";
+  return isJarvisRoute(executorKind) ? "JARVIS-VLA visual-control route" : "Mineflayer structured-control route";
 }
 
 function executorPromptNotes(executorKind: ExecutorKind): string[] {
-  if (executorKind === "jarvis") {
+  if (isJarvisRoute(executorKind)) {
     return [
       "The active executor is JARVIS-VLA style visual control.",
       "Prefer subtasks and actions grounded in nearby, visible, and reachable affordances rather than Mineflayer-specific API assumptions.",
@@ -80,7 +90,7 @@ export function plannerSystemPrompt(style: string, executorKind: ExecutorKind): 
     "Work recursively: if the active head needs an item, obtain it first; if obtainment needs a resource area, locate that area first; if the area is not visible, search/pathfind toward the correct domain before collecting or placing.",
     "Search domains: surface/overground for trees, saplings, sand, and grass; subterranean/deeper for ores; aquatic/water for boats and fishing; local for nearby stone and simple blocks.",
     "If the bot is underground but the active head needs surface resources, pathfind upward to the surface before surface search.",
-    executorKind === "jarvis"
+    isJarvisRoute(executorKind)
       ? "Return one atomic, verifiable action using visible, nearby, and reachable cues as truth. Do not depend on Mineflayer-only implementation details."
       : "Return one atomic, verifiable action using Mineflayer blocks, entities, sight, and interaction hints as truth.",
     "Use recent positions/actions to detect loops. For search, choose a useful frontier direction; change direction or depth after revisits.",
@@ -165,9 +175,14 @@ export function plannerUserPrompt(
     locateStyleSubtask && activeTargetVisible
       ? "collect now; target is already visible"
       : activeSubtask?.expectedAction ?? "infer from focus";
+  const combatPlannerNote =
+    isJarvisRoute(executorKind) && isCombatObjective(taskContext?.rootObjective ?? worldState.userObjective)
+      ? "COMBAT MODE: Root objective is zombie/combat. Propose combat actions (scan, orient, approach, attack) only. Do NOT propose wood/tool/crafting steps."
+      : null;
   return [
     "Generate exactly one proposal. Advance the active task or its immediate blocker only.",
     `Executor route: ${executorRouteLabel(executorKind)}.`,
+    ...(combatPlannerNote ? [combatPlannerNote] : []),
     "Think in nested prerequisites: missing item -> locate resource area -> search/pathfind -> collect/craft -> final action.",
     "Use issues/history to avoid failed or stagnant repeats unless state changed materially.",
     `Root: ${taskContext?.rootObjective ?? worldState.userObjective}`,
@@ -269,8 +284,12 @@ export function taskDecompositionSystemPrompt(executorKind: ExecutorKind): strin
     "Smelting chains need furnace placement and fuel when not already available.",
     "Use legacy item ids with underscores (oak_log, iron_ingot, boat, sapling, crafting_table, planks).",
     "Pick targetItem to match what the queue actually needs (for example planks if building, not logs, when planks are the consumed material).",
-    executorKind === "jarvis"
-      ? "For JARVIS, prefer subtasks that can be verified from visible scene changes, nearby affordances, inventory deltas, and explicit workstation setup."
+    isJarvisRoute(executorKind)
+      ? [
+          "For JARVIS, prefer subtasks that can be verified from visible scene changes, nearby affordances, inventory deltas, and explicit workstation setup.",
+          "IMPORTANT: For JARVIS combat objectives (zombie, attack, fight, kill, sword, mob, hostile): produce ONLY combat-oriented subtasks such as scan_for_zombie, orient_to_zombie, approach_zombie, attack_zombie, verify_zombie_outcome.",
+          "Do NOT add locate_trees, collect_logs, craft_sword, or any wood/tool/crafting prerequisites for combat objectives.",
+        ].join(" ")
       : "For Mineflayer, use the structured nearby-block and interaction hints to keep subtasks grounded.",
     "Return subtasks in execution order: prerequisites first, root goal last.",
     "Each subtask is atomic and verifiable. Use stable snake_case ids (obtain_sapling, locate_water, craft_stone_pickaxe).",
@@ -286,9 +305,19 @@ export function taskDecompositionUserPrompt(
   executorKind: ExecutorKind = "mineflayer",
 ): string {
   const inventorySummary = worldState.inventory.map((stack) => `${stack.item} x${stack.count}`).join(", ");
+  const combatHint =
+    isJarvisRoute(executorKind) && isCombatObjective(objective)
+      ? [
+          "CRITICAL — COMBAT OBJECTIVE DETECTED: This objective involves combat or zombie killing.",
+          "You MUST produce ONLY combat subtasks: scan_for_zombie, orient_to_zombie, approach_zombie, attack_zombie, verify_zombie_outcome.",
+          "Do NOT output locate_trees, collect_logs, craft_planks, craft_sword, place_crafting_table, or any wood/tool/crafting subtask.",
+          "Assume the player already has or can find what they need to fight. Focus on the combat sequence only.",
+        ].join(" ")
+      : null;
   return [
     "Decompose this objective into the full ordered subtask queue including all prerequisites.",
     `Executor route: ${executorRouteLabel(executorKind)}.`,
+    ...(combatHint ? [combatHint] : []),
     `Root objective: ${objective}`,
     `Current inventory totals: ${inventorySummary || "empty"}`,
     `Recent planning memory: ${JSON.stringify(memorySummary.slice(-6))}`,
@@ -306,7 +335,7 @@ export function taskRefinementSystemPrompt(executorKind: ExecutorKind): string {
     "Only insert what is still missing given inventory, hints, and the failure reason.",
     "Do not repeat completed or queued work. Do not replace the active subtask.",
     "Use legacy item ids with underscores. Use empty string for unused targetItem or destination; targetCount 1 for one-shot steps.",
-    executorKind === "jarvis"
+    isJarvisRoute(executorKind)
       ? "For JARVIS, bias toward nearby setup, visibility recovery, and explicit workstation or destination access before retrying the blocked action."
       : "For Mineflayer, bias toward prerequisite subtasks that make structured-state affordances available before retrying.",
     "Return prerequisiteSubtasks in execution order (earliest first). Return an empty array if no new prerequisites are needed.",
