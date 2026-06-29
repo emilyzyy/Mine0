@@ -4,20 +4,82 @@ import {
   interpolate,
   OffthreadVideo,
   staticFile,
-  Easing,
   useCurrentFrame,
+  Easing,
 } from "remotion";
 import { THEME, SCENE_DURATIONS } from "../theme";
 import { SceneFade } from "../components/SceneFade";
 import { Placeholder } from "../components/Placeholder";
 
-const D = SCENE_DURATIONS.mainDemo; // 480 frames
+const D = SCENE_DURATIONS.mainDemo; // 630 frames
 
 interface Props {
   hasUiTree: boolean;
   hasMcPov: boolean;
   hasSideBySide: boolean;
 }
+
+// Animated callouts over the left panel
+const CALLOUTS = [
+  { text: "next subgoal selected",   color: THEME.accent,    startF: 80  },
+  { text: "memory updated",          color: THEME.mc.xpGreen,startF: 180 },
+  { text: "verification running",    color: THEME.warn,      startF: 280 },
+  { text: "replan triggered",        color: THEME.accent2,   startF: 380 },
+  { text: "next subgoal selected",   color: THEME.accent,    startF: 480 },
+  { text: "memory updated",          color: THEME.mc.xpGreen,startF: 560 },
+];
+
+// MC panel label
+const McLabel: React.FC<{ text: string; sub: string; color: string; opacity: number }> = ({
+  text, sub, color, opacity,
+}) => (
+  <div
+    style={{
+      opacity,
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "6px 12px",
+      background: "rgba(0,0,0,0.7)",
+      border: `2px solid`,
+      borderColor: `${THEME.mc.stoneLight} ${THEME.mc.stoneDark} ${THEME.mc.stoneDark} ${THEME.mc.stoneLight}`,
+      flexShrink: 0,
+    }}
+  >
+    <div
+      style={{
+        width: 8,
+        height: 8,
+        background: color,
+        boxShadow: `0 0 6px ${color}`,
+      }}
+    />
+    <div>
+      <div
+        style={{
+          fontFamily: THEME.fontMono,
+          fontSize: 13,
+          color: color,
+          letterSpacing: "0.08em",
+          lineHeight: 1.1,
+        }}
+      >
+        {text}
+      </div>
+      <div
+        style={{
+          fontFamily: THEME.fontMono,
+          fontSize: 10,
+          color: THEME.textDim,
+          letterSpacing: "0.04em",
+          lineHeight: 1.1,
+        }}
+      >
+        {sub}
+      </div>
+    </div>
+  </div>
+);
 
 export const MainDemoScene: React.FC<Props> = ({
   hasUiTree,
@@ -26,37 +88,50 @@ export const MainDemoScene: React.FC<Props> = ({
 }) => {
   const frame = useCurrentFrame();
 
-  const headerOpacity = interpolate(frame, [8, 28], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
-  const panelOpacity = interpolate(frame, [18, 45], [0, 1], {
+  const headerIn = interpolate(frame, [8, 26], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.out(Easing.quad),
   });
 
-  const overlayOpacity = interpolate(frame, [70, 95], [0, 1], {
+  const panelIn = interpolate(frame, [20, 48], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.out(Easing.quad),
+  });
+
+  const overlayIn = interpolate(frame, [55, 80], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
   // Live indicator pulse
   const livePulse = interpolate(
-    Math.sin((frame / 20) * Math.PI),
+    Math.sin((frame / 18) * Math.PI),
     [-1, 1],
     [0.5, 1]
   );
 
+  // "Watch the plan change..." text
+  const watchOpacity = interpolate(frame, [62, 82], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
   return (
     <SceneFade durationInFrames={D}>
-      <AbsoluteFill style={{ display: "flex", flexDirection: "column" }}>
+      <AbsoluteFill
+        style={{
+          background: "#070b12",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         {/* Top header bar */}
         <div
           style={{
-            opacity: headerOpacity,
-            padding: "28px 60px 16px",
+            opacity: headerIn,
+            padding: "22px 50px 12px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -64,98 +139,116 @@ export const MainDemoScene: React.FC<Props> = ({
           }}
         >
           <div>
-            <span
-              style={{
-                fontFamily: THEME.fontMono,
-                fontSize: 16,
-                color: THEME.accent,
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
-              }}
-            >
-              — live demo
-            </span>
             <div
               style={{
-                fontSize: 42,
-                fontWeight: 700,
-                color: THEME.text,
-                lineHeight: 1.1,
-                marginTop: 4,
+                fontFamily: THEME.fontMono,
+                fontSize: 14,
+                color: THEME.mc.xpGreen,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                marginBottom: 4,
               }}
             >
-              The decision tree is alive
-              <br />
-              <span style={{ color: THEME.accent }}>while the agent acts</span>
+              — live execution
+            </div>
+            <div
+              style={{
+                fontSize: 40,
+                fontWeight: 700,
+                color: THEME.text,
+                letterSpacing: "-0.02em",
+                lineHeight: 1.1,
+              }}
+            >
+              Watch the plan change{" "}
+              <span style={{ color: THEME.mc.xpGreen }}>
+                while the world changes.
+              </span>
             </div>
           </div>
 
-          {/* Live indicator */}
+          {/* Running badge */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: 10,
-              background: "rgba(34,197,94,0.1)",
-              border: "1px solid rgba(34,197,94,0.3)",
-              borderRadius: 24,
-              padding: "10px 20px",
+              background: "rgba(0,0,0,0.6)",
+              border: `2px solid`,
+              borderColor: `${THEME.mc.stoneLight} ${THEME.mc.stoneDark} ${THEME.mc.stoneDark} ${THEME.mc.stoneLight}`,
+              padding: "10px 18px",
+              gap: 10,
             }}
           >
             <div
               style={{
                 width: 10,
                 height: 10,
-                borderRadius: "50%",
-                background: THEME.accent3,
+                background: THEME.mc.xpGreen,
+                boxShadow: `0 0 8px ${THEME.mc.xpGreen}`,
                 opacity: livePulse,
               }}
             />
             <span
               style={{
                 fontFamily: THEME.fontMono,
-                fontSize: 16,
-                color: THEME.accent3,
-                letterSpacing: "0.05em",
+                fontSize: 14,
+                color: THEME.mc.xpGreen,
+                letterSpacing: "0.08em",
               }}
             >
-              RUNNING
+              AGENT RUNNING
             </span>
           </div>
         </div>
 
-        {/* Main video area */}
+        {/* Panel area */}
         <div
           style={{
             flex: 1,
-            padding: "8px 60px 16px",
-            opacity: panelOpacity,
+            padding: "6px 50px 60px",
+            opacity: panelIn,
             display: "flex",
-            gap: 16,
+            gap: 14,
             minHeight: 0,
           }}
         >
           {hasSideBySide ? (
-            /* Single combined recording */
             <div
               style={{
                 flex: 1,
-                borderRadius: 12,
-                overflow: "hidden",
-                border: `1px solid ${THEME.bgCardBorder}`,
-                position: "relative",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                minWidth: 0,
               }}
             >
-              <OffthreadVideo
-                src={staticFile("clips/side_by_side.mp4")}
-                muted
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              <McLabel
+                text="TASK / WORLD MODEL"
+                sub="live execution view"
+                color={THEME.accent}
+                opacity={overlayIn}
               />
+              <div
+                style={{
+                  flex: 1,
+                  border: `2px solid ${THEME.mc.stoneDark}`,
+                  borderTop: `3px solid ${THEME.mc.stoneLight}`,
+                  overflow: "hidden",
+                  position: "relative",
+                  minHeight: 0,
+                }}
+              >
+                <OffthreadVideo
+                  src={staticFile("clips/side_by_side.mp4")}
+                  muted
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              </div>
             </div>
           ) : (
-            /* Side-by-side panels */
             <>
-              {/* Left — UI / decision tree */}
+              {/* Left panel — Task Map */}
               <div
                 style={{
                   flex: 1,
@@ -163,19 +256,21 @@ export const MainDemoScene: React.FC<Props> = ({
                   flexDirection: "column",
                   gap: 8,
                   minWidth: 0,
+                  position: "relative",
                 }}
               >
-                <PanelLabel
-                  text="Planner / Memory / Verifier"
+                <McLabel
+                  text="TASK MAP"
+                  sub="Live task / world model"
                   color={THEME.accent2}
-                  opacity={overlayOpacity}
+                  opacity={overlayIn}
                 />
                 <div
                   style={{
                     flex: 1,
-                    borderRadius: 12,
+                    border: `2px solid ${THEME.mc.stoneDark}`,
+                    borderTop: `3px solid ${THEME.mc.stoneLight}`,
                     overflow: "hidden",
-                    border: `1px solid ${THEME.accent2}44`,
                     position: "relative",
                     minHeight: 0,
                   }}
@@ -184,7 +279,11 @@ export const MainDemoScene: React.FC<Props> = ({
                     <OffthreadVideo
                       src={staticFile("clips/ui_tree.mp4")}
                       muted
-                      style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
                     />
                   ) : (
                     <Placeholder
@@ -192,10 +291,45 @@ export const MainDemoScene: React.FC<Props> = ({
                       accent={THEME.accent2}
                     />
                   )}
+
+                  {/* Animated callout chips over panel */}
+                  {CALLOUTS.map((c, i) => {
+                    const vis = interpolate(
+                      frame,
+                      [c.startF, c.startF + 12, c.startF + 60, c.startF + 80],
+                      [0, 1, 1, 0],
+                      {
+                        extrapolateLeft: "clamp",
+                        extrapolateRight: "clamp",
+                      }
+                    );
+                    if (vis <= 0) return null;
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          position: "absolute",
+                          bottom: 16 + (i % 3) * 44,
+                          left: 12,
+                          opacity: vis,
+                          background: "rgba(0,0,0,0.82)",
+                          border: `1px solid ${c.color}55`,
+                          padding: "6px 14px",
+                          fontFamily: THEME.fontMono,
+                          fontSize: 14,
+                          color: c.color,
+                          letterSpacing: "0.04em",
+                          pointerEvents: "none",
+                        }}
+                      >
+                        › {c.text}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Right — Minecraft POV */}
+              {/* Right panel — World View */}
               <div
                 style={{
                   flex: 1,
@@ -205,17 +339,18 @@ export const MainDemoScene: React.FC<Props> = ({
                   minWidth: 0,
                 }}
               >
-                <PanelLabel
-                  text="Minecraft Execution"
-                  color={THEME.accent3}
-                  opacity={overlayOpacity}
+                <McLabel
+                  text="WORLD VIEW"
+                  sub="Minecraft execution"
+                  color={THEME.mc.xpGreen}
+                  opacity={overlayIn}
                 />
                 <div
                   style={{
                     flex: 1,
-                    borderRadius: 12,
+                    border: `2px solid ${THEME.mc.stoneDark}`,
+                    borderTop: `3px solid ${THEME.mc.stoneLight}`,
                     overflow: "hidden",
-                    border: `1px solid ${THEME.accent3}44`,
                     position: "relative",
                     minHeight: 0,
                   }}
@@ -224,12 +359,16 @@ export const MainDemoScene: React.FC<Props> = ({
                     <OffthreadVideo
                       src={staticFile("clips/minecraft_pov.mp4")}
                       muted
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
                     />
                   ) : (
                     <Placeholder
                       label="INSERT MINECRAFT POV RECORDING"
-                      accent={THEME.accent3}
+                      accent={THEME.mc.xpGreen}
                     />
                   )}
                 </div>
@@ -238,79 +377,37 @@ export const MainDemoScene: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Bottom overlay caption */}
+        {/* Caption below panels */}
         <div
           style={{
-            opacity: overlayOpacity,
-            padding: "0 60px 28px",
+            opacity: watchOpacity,
+            position: "absolute",
+            bottom: 62,
+            left: 0,
+            right: 0,
             display: "flex",
-            alignItems: "center",
-            gap: 16,
-            flexShrink: 0,
+            justifyContent: "center",
+            pointerEvents: "none",
           }}
         >
           <div
             style={{
-              flex: 1,
-              height: 1,
-              background: `linear-gradient(90deg, ${THEME.accent}44, transparent)`,
-            }}
-          />
-          <div
-            style={{
               fontFamily: THEME.fontMono,
-              fontSize: 17,
-              color: THEME.textMuted,
-              whiteSpace: "nowrap",
+              fontSize: 15,
+              color: THEME.textDim,
+              display: "flex",
+              gap: 16,
+              alignItems: "center",
             }}
           >
-            Cerebras/Gemma plans in text &nbsp;·&nbsp; JARVIS-VLA or Mineflayer acts in-world
+            <span style={{ color: THEME.accent }}>Cerebras/Gemma plans in text</span>
+            <span>·</span>
+            <span>JARVIS-VLA or Mineflayer acts in-world</span>
+            <span>·</span>
+            <span style={{ color: THEME.mc.xpGreen }}>verifier checks progress</span>
           </div>
-          <div
-            style={{
-              flex: 1,
-              height: 1,
-              background: `linear-gradient(90deg, transparent, ${THEME.accent}44)`,
-            }}
-          />
         </div>
       </AbsoluteFill>
     </SceneFade>
   );
 };
-
-const PanelLabel: React.FC<{
-  text: string;
-  color: string;
-  opacity: number;
-}> = ({ text, color, opacity }) => (
-  <div
-    style={{
-      opacity,
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      flexShrink: 0,
-    }}
-  >
-    <div
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: "50%",
-        background: color,
-      }}
-    />
-    <span
-      style={{
-        fontFamily: THEME.fontMono,
-        fontSize: 15,
-        color: color,
-        letterSpacing: "0.06em",
-        textTransform: "uppercase",
-      }}
-    >
-      {text}
-    </span>
-  </div>
-);

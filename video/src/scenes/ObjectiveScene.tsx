@@ -2,13 +2,21 @@ import React from "react";
 import {
   AbsoluteFill,
   interpolate,
-  Easing,
   useCurrentFrame,
+  Easing,
 } from "remotion";
 import { THEME, SCENE_DURATIONS } from "../theme";
 import { SceneFade } from "../components/SceneFade";
 
-const D = SCENE_DURATIONS.objective; // 180 frames
+const D = SCENE_DURATIONS.objective; // 150 frames
+
+// Cycling goal examples — shown quickly in sequence
+const GOAL_EXAMPLES = [
+  "Find resources.",
+  "Survive the night.",
+  "Build shelter.",
+  "Hunt mobs.",
+];
 
 interface Props {
   objective: string;
@@ -18,243 +26,296 @@ export const ObjectiveScene: React.FC<Props> = ({ objective }) => {
   const frame = useCurrentFrame();
 
   // Heading
-  const headOpacity = interpolate(frame, [8, 28], [0, 1], {
+  const headOpacity = interpolate(frame, [5, 22], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const headY = interpolate(frame, [8, 30], [20, 0], {
+  const headY = interpolate(frame, [5, 25], [18, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.out(Easing.quad),
   });
 
-  // Console box
-  const boxOpacity = interpolate(frame, [20, 38], [0, 1], {
+  // Command block appears
+  const blockOpacity = interpolate(frame, [18, 35], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
-  // Typing effect — 60 chars/s at 30fps ≈ 2 chars/frame
-  const typingStart = 35;
-  const typingDuration = 55;
-  const charsToShow = Math.floor(
-    interpolate(frame, [typingStart, typingStart + typingDuration], [0, objective.length], {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    })
-  );
-  const displayedText = objective.slice(0, charsToShow);
-  const showCursor = frame < typingStart + typingDuration + 20;
-  const cursorVisible = Math.floor(frame / 12) % 2 === 0;
+  // Cycle goal examples (each shown for 16 frames), then hold on final objective
+  const cycleEnd = 80;
+  const exampleIdx =
+    frame < cycleEnd
+      ? Math.floor(frame / (cycleEnd / GOAL_EXAMPLES.length)) %
+        GOAL_EXAMPLES.length
+      : -1;
+  const displayGoal =
+    exampleIdx >= 0 ? GOAL_EXAMPLES[exampleIdx] : objective;
 
-  // Arrow + label
-  const arrowOpacity = interpolate(frame, [100, 120], [0, 1], {
+  // Cursor blink in command block
+  const cursorVisible = Math.floor(frame / 10) % 2 === 0;
+  const showCursor = frame < cycleEnd + 15;
+
+  // Flow badges
+  const badgesOpacity = interpolate(frame, [100, 118], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const arrowScale = interpolate(frame, [100, 125], [0.85, 1], {
+
+  // Caption
+  const captionOpacity = interpolate(frame, [115, 135], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
-    easing: Easing.out(Easing.back(1.5)),
   });
 
-  // Flow steps
-  const steps = [
-    { label: "Natural language objective", icon: "›", color: THEME.text },
-    { label: "Cerebras / Gemma-4-31b decomposes goal", icon: "›", color: THEME.accent },
-    { label: "Ordered subtask queue created", icon: "›", color: THEME.accent3 },
-    { label: "Executor receives first subgoal intent", icon: "›", color: THEME.accent2 },
-  ];
+  // Night-sky background bleeds through
+  const bgStoneOpacity = interpolate(frame, [5, 25], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
   return (
     <SceneFade durationInFrames={D}>
       <AbsoluteFill
         style={{
+          background: `linear-gradient(180deg, ${THEME.mc.nightSky} 0%, #0A1225 100%)`,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "0 180px",
-          gap: 0,
+          padding: "0 160px",
         }}
       >
-        {/* Section label */}
+        {/* Subtle pixel grid */}
         <div
           style={{
-            opacity: headOpacity,
-            transform: `translateY(${headY}px)`,
-            fontSize: 18,
-            fontFamily: THEME.fontMono,
-            color: THEME.accent,
-            letterSpacing: "0.15em",
-            textTransform: "uppercase",
-            marginBottom: 20,
-            alignSelf: "flex-start",
+            position: "absolute",
+            inset: 0,
+            ...THEME.pixelGrid,
+            opacity: 0.4,
           }}
-        >
-          — objective input
-        </div>
+        />
 
         {/* Heading */}
         <div
           style={{
             opacity: headOpacity,
             transform: `translateY(${headY}px)`,
-            fontSize: 56,
-            fontWeight: 700,
-            color: THEME.text,
-            letterSpacing: "-0.02em",
-            lineHeight: 1.1,
-            marginBottom: 48,
-            alignSelf: "flex-start",
+            textAlign: "center",
+            marginBottom: 36,
           }}
         >
-          Natural language objective
-          <br />
-          <span style={{ color: THEME.accent }}>→ recursive Minecraft plan</span>
-        </div>
-
-        {/* Console box */}
-        <div
-          style={{
-            opacity: boxOpacity,
-            width: "100%",
-            background: "rgba(0,0,0,0.6)",
-            border: `1px solid ${THEME.accent}44`,
-            borderRadius: 10,
-            overflow: "hidden",
-          }}
-        >
-          {/* Terminal chrome */}
           <div
             style={{
-              background: "#0d1520",
-              padding: "10px 16px",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              borderBottom: `1px solid ${THEME.bgCardBorder}`,
+              fontFamily: THEME.fontMono,
+              fontSize: 15,
+              color: THEME.mc.xpGreen,
+              letterSpacing: "0.16em",
+              textTransform: "uppercase",
+              marginBottom: 12,
             }}
           >
-            {["#ff5f57", "#ffbd2e", "#28c840"].map((c) => (
-              <div
-                key={c}
-                style={{ width: 12, height: 12, borderRadius: "50%", background: c }}
-              />
-            ))}
+            — give mine0 a job
+          </div>
+          <div
+            style={{
+              fontSize: 56,
+              fontWeight: 700,
+              color: THEME.text,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.1,
+            }}
+          >
+            Natural language in.
+            <br />
+            <span style={{ color: THEME.mc.xpGreen }}>
+              Autonomous Minecraft work out.
+            </span>
+          </div>
+        </div>
+
+        {/* Command block panel (Minecraft aesthetic) */}
+        <div
+          style={{
+            opacity: blockOpacity,
+            width: "100%",
+            maxWidth: 1100,
+          }}
+        >
+          {/* Stone-textured header */}
+          <div
+            style={{
+              background: THEME.mc.stoneDark,
+              backgroundImage: `
+                repeating-linear-gradient(90deg, transparent, transparent 7px, rgba(255,255,255,0.04) 7px, rgba(255,255,255,0.04) 8px),
+                repeating-linear-gradient(0deg, transparent, transparent 7px, rgba(255,255,255,0.04) 7px, rgba(255,255,255,0.04) 8px)
+              `,
+              padding: "10px 18px",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              borderLeft: `4px solid ${THEME.mc.redstone}`,
+              borderTop: `2px solid ${THEME.mc.stoneLight}`,
+              borderRight: `2px solid ${THEME.mc.stoneLight}`,
+            }}
+          >
+            {/* Redstone indicator */}
             <div
               style={{
-                flex: 1,
-                textAlign: "center",
+                width: 14,
+                height: 14,
+                background: THEME.mc.redstone,
+                boxShadow: `0 0 8px ${THEME.mc.redstone}`,
+                ...THEME.pixelGrid,
+              }}
+            />
+            <span
+              style={{
                 fontFamily: THEME.fontMono,
-                fontSize: 14,
-                color: THEME.textDim,
+                fontSize: 13,
+                color: THEME.mc.stoneLight,
+                letterSpacing: "0.08em",
               }}
             >
-              mine0 — objective
+              MINE0 — COMMAND INPUT
+            </span>
+            <div style={{ flex: 1 }} />
+            <div
+              style={{
+                fontFamily: THEME.fontMono,
+                fontSize: 11,
+                color: THEME.mc.xpGreen,
+                letterSpacing: "0.06em",
+              }}
+            >
+              READY
             </div>
           </div>
 
-          {/* Terminal body */}
-          <div style={{ padding: "24px 28px", minHeight: 90 }}>
-            <span
+          {/* Command block body */}
+          <div
+            style={{
+              background: "#0A0F1A",
+              border: `2px solid ${THEME.mc.stoneDark}`,
+              borderTop: "none",
+              padding: "28px 28px 24px",
+            }}
+          >
+            <div
               style={{
-                fontFamily: THEME.fontMono,
-                fontSize: 13,
-                color: THEME.accent3,
-                marginRight: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                marginBottom: 8,
               }}
             >
-              $
-            </span>
-            <span
+              <span
+                style={{
+                  fontFamily: THEME.fontMono,
+                  fontSize: 14,
+                  color: THEME.mc.redstone,
+                }}
+              >
+                /objective
+              </span>
+              <div
+                style={{
+                  flex: 1,
+                  height: 1,
+                  background: `${THEME.mc.stoneDark}`,
+                }}
+              />
+            </div>
+            <div
               style={{
                 fontFamily: THEME.fontMono,
-                fontSize: 13,
-                color: THEME.textDim,
-                marginRight: 8,
-              }}
-            >
-              npm run demo --
-            </span>
-            <span
-              style={{
-                fontFamily: THEME.fontMono,
-                fontSize: 22,
+                fontSize: 28,
                 color: THEME.text,
+                minHeight: 42,
                 letterSpacing: "0.01em",
               }}
             >
-              &ldquo;{displayedText}
+              {displayGoal}
               {showCursor && cursorVisible && (
                 <span
                   style={{
                     display: "inline-block",
                     width: 14,
-                    height: 26,
-                    background: THEME.accent,
+                    height: 30,
+                    background: THEME.mc.xpGreen,
                     verticalAlign: "text-bottom",
-                    marginLeft: 2,
+                    marginLeft: 3,
                   }}
                 />
               )}
-              &rdquo;
-            </span>
+            </div>
           </div>
         </div>
 
-        {/* Flow steps */}
+        {/* Flow badges */}
         <div
           style={{
-            opacity: arrowOpacity,
-            transform: `scale(${arrowScale})`,
-            marginTop: 40,
+            opacity: badgesOpacity,
+            marginTop: 32,
             display: "flex",
-            gap: 0,
-            alignSelf: "center",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          {steps.map((step, i) => {
-            const stepOpacity = interpolate(
-              frame,
-              [105 + i * 12, 125 + i * 12],
-              [0, 1],
-              { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-            );
-            return (
-              <React.Fragment key={i}>
-                {i > 0 && (
-                  <div
-                    style={{
-                      opacity: stepOpacity,
-                      display: "flex",
-                      alignItems: "center",
-                      padding: "0 8px",
-                      color: THEME.textDim,
-                      fontSize: 24,
-                    }}
-                  >
-                    →
-                  </div>
-                )}
-                <div
-                  style={{
-                    opacity: stepOpacity,
-                    background: "rgba(34,211,238,0.06)",
-                    border: `1px solid ${step.color}33`,
-                    borderRadius: 8,
-                    padding: "12px 20px",
-                    fontFamily: THEME.fontMono,
-                    fontSize: 15,
-                    color: step.color,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {step.icon} {step.label}
-                </div>
-              </React.Fragment>
-            );
-          })}
+          {[
+            { label: "TEXT GOAL", color: THEME.accent, bg: "rgba(34,211,238,0.08)" },
+            { label: "→", color: THEME.textDim, bg: "transparent", border: "none" },
+            { label: "TASK MODEL", color: THEME.mc.xpGreen, bg: `rgba(${THEME.mc.xpGreen},0.08)` },
+            { label: "→", color: THEME.textDim, bg: "transparent", border: "none" },
+            { label: "SUBTASK QUEUE", color: THEME.accent2, bg: "rgba(124,58,237,0.08)" },
+            { label: "→", color: THEME.textDim, bg: "transparent", border: "none" },
+            { label: "ACTION", color: THEME.warn, bg: "rgba(245,158,11,0.08)" },
+          ].map((b, i) =>
+            b.label === "→" ? (
+              <span
+                key={i}
+                style={{
+                  fontFamily: THEME.fontMono,
+                  fontSize: 20,
+                  color: b.color,
+                }}
+              >
+                →
+              </span>
+            ) : (
+              <div
+                key={i}
+                style={{
+                  fontFamily: THEME.fontMono,
+                  fontSize: 13,
+                  padding: "6px 16px",
+                  background: b.bg,
+                  border: `1px solid ${b.color}44`,
+                  color: b.color,
+                  letterSpacing: "0.08em",
+                }}
+              >
+                {b.label}
+              </div>
+            )
+          )}
+        </div>
+
+        {/* Caption */}
+        <div
+          style={{
+            opacity: captionOpacity,
+            marginTop: 24,
+            fontFamily: THEME.fontSans,
+            fontSize: 22,
+            color: THEME.textMuted,
+            textAlign: "center",
+          }}
+        >
+          Give Mine0 a job.{" "}
+          <span style={{ color: THEME.text }}>
+            It builds the plan, watches what happened, and keeps going.
+          </span>
         </div>
       </AbsoluteFill>
     </SceneFade>

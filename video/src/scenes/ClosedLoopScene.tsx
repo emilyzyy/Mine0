@@ -10,41 +10,102 @@ import {
 import { THEME, SCENE_DURATIONS } from "../theme";
 import { SceneFade } from "../components/SceneFade";
 
-const D = SCENE_DURATIONS.closedLoop; // 300 frames
+const D = SCENE_DURATIONS.useCases; // 300 frames
 
-interface CardDef {
+// Minecraft-style advancement / quest tiles
+interface UseCaseTile {
   title: string;
-  description: string;
+  caption: string;
   color: string;
-  icon: string;
+  // Simple SVG icon
+  icon: React.ReactNode;
 }
 
-const CARDS: CardDef[] = [
+const TILES: UseCaseTile[] = [
   {
-    title: "Planner Agent",
-    description: "Decomposes the objective into an ordered subtask queue using Cerebras/Gemma.",
-    color: THEME.accent2,
-    icon: "◈",
+    title: "Resource run",
+    caption: "Farm while you're away",
+    color: THEME.mc.xpGreen,
+    icon: (
+      <svg width={32} height={32} viewBox="0 0 20 20">
+        <rect x={3} y={3} width={5} height={5} fill="#5A9C1A" />
+        <rect x={8} y={3} width={5} height={5} fill="#875C27" />
+        <rect x={3} y={8} width={5} height={5} fill="#875C27" />
+        <rect x={8} y={8} width={5} height={5} fill="#5A9C1A" />
+        <rect x={13} y={5} width={4} height={10} fill={THEME.mc.xpGreen} opacity={0.6} />
+      </svg>
+    ),
   },
   {
-    title: "Executor Backend",
-    description: "Acts in Minecraft — JARVIS-VLA for embodied visual control, Mineflayer for reliable scripted control.",
-    color: THEME.accent3,
-    icon: "◉",
-  },
-  {
-    title: "Verifier Agent",
-    description: "Checks whether the subgoal succeeded. Issues tags: repetitive_action_loop, blocked, placement_failure.",
-    color: THEME.warn,
-    icon: "◎",
-  },
-  {
-    title: "Memory Agent",
-    description: "Records failures and prevents the same strategy from repeating in future planning cycles.",
+    title: "Explore terrain",
+    caption: "Scout unknown biomes",
     color: THEME.accent,
-    icon: "◐",
+    icon: (
+      <svg width={32} height={32} viewBox="0 0 20 20">
+        <circle cx={10} cy={10} r={7} fill="none" stroke={THEME.accent} strokeWidth={1.5} />
+        <line x1={10} y1={3} x2={10} y2={7} stroke={THEME.accent} strokeWidth={1.5} />
+        <line x1={10} y1={13} x2={10} y2={17} stroke={THEME.accent} strokeWidth={1.5} />
+        <line x1={3} y1={10} x2={7} y2={10} stroke={THEME.accent} strokeWidth={1.5} />
+        <line x1={13} y1={10} x2={17} y2={10} stroke={THEME.accent} strokeWidth={1.5} />
+        <circle cx={10} cy={10} r={2} fill={THEME.accent} />
+      </svg>
+    ),
+  },
+  {
+    title: "Recover from failure",
+    caption: "Stalls become new plans",
+    color: THEME.warn,
+    icon: (
+      <svg width={32} height={32} viewBox="0 0 20 20">
+        <path
+          d="M10,3 L15,8 L13,8 C13,11.5 10.5,14 7,14 C9,12 10,10 10,8 L8,8 Z"
+          fill={THEME.warn}
+          opacity={0.9}
+        />
+      </svg>
+    ),
+  },
+  {
+    title: "Chain long tasks",
+    caption: "Multi-step autonomous work",
+    color: THEME.accent2,
+    icon: (
+      <svg width={32} height={32} viewBox="0 0 20 20">
+        <rect x={2} y={7} width={5} height={5} fill="none" stroke={THEME.accent2} strokeWidth={1.5} />
+        <rect x={8} y={7} width={5} height={5} fill="none" stroke={THEME.accent2} strokeWidth={1.5} />
+        <rect x={14} y={7} width={5} height={5} fill="none" stroke={THEME.accent2} strokeWidth={1.5} />
+        <line x1={7} y1={9.5} x2={8} y2={9.5} stroke={THEME.accent2} strokeWidth={1.5} />
+        <line x1={13} y1={9.5} x2={14} y2={9.5} stroke={THEME.accent2} strokeWidth={1.5} />
+      </svg>
+    ),
+  },
+  {
+    title: "Swap execution backend",
+    caption: "JARVIS-VLA or Mineflayer",
+    color: THEME.mc.diamond,
+    icon: (
+      <svg width={32} height={32} viewBox="0 0 20 20">
+        <rect x={2} y={5} width={7} height={5} fill="none" stroke={THEME.mc.diamond} strokeWidth={1.5} />
+        <rect x={11} y={10} width={7} height={5} fill="none" stroke={THEME.mc.diamond} strokeWidth={1.5} />
+        <path d="M9,7.5 L11,7.5 L11,6 L14,8 L11,10 L11,8.5 L9,8.5 Z" fill={THEME.mc.diamond} opacity={0.7} />
+      </svg>
+    ),
   },
 ];
+
+// Advancement tile style (Minecraft UI inspired)
+const tileBg = (color: string): React.CSSProperties => ({
+  background: `linear-gradient(135deg, rgba(10,18,10,0.95) 0%, rgba(8,12,8,0.95) 100%)`,
+  border: `2px solid`,
+  borderColor: `${THEME.mc.stoneLight} ${THEME.mc.stoneDark} ${THEME.mc.stoneDark} ${THEME.mc.stoneLight}`,
+  boxShadow: `0 0 18px ${color}22, inset 0 0 40px ${color}08`,
+  padding: "20px 16px",
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 10,
+  flex: 1,
+  minWidth: 0,
+});
 
 export const ClosedLoopScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -55,57 +116,53 @@ export const ClosedLoopScene: React.FC = () => {
     extrapolateRight: "clamp",
   });
 
-  // Cards stagger in starting at frame 30, every 45 frames
-  const cardStagger = 45;
-  const cardStart = 28;
-
-  // Loop arrow connecting card 4 back to card 1 appears at frame 220
-  const loopArrowOpacity = interpolate(frame, [220, 245], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
   // Caption
-  const captionOpacity = interpolate(frame, [255, 278], [0, 1], {
+  const captionOpacity = interpolate(frame, [260, 278], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-
-  // Animated cycle highlight — which card is "active" right now
-  const cyclePos = frame >= 200
-    ? ((frame - 200) / 38) % CARDS.length
-    : -1;
 
   return (
     <SceneFade durationInFrames={D}>
       <AbsoluteFill
         style={{
+          background: `linear-gradient(180deg, #060910 0%, #0A1020 100%)`,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "0 120px",
+          padding: "0 70px",
         }}
       >
+        {/* Pixel grid */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            ...THEME.pixelGrid,
+            opacity: 0.25,
+          }}
+        />
+
         {/* Header */}
         <div
           style={{
             opacity: headerOpacity,
             textAlign: "center",
-            marginBottom: 60,
+            marginBottom: 44,
           }}
         >
           <div
             style={{
               fontFamily: THEME.fontMono,
-              fontSize: 16,
-              color: THEME.accent,
-              letterSpacing: "0.14em",
+              fontSize: 15,
+              color: THEME.mc.xpGreen,
+              letterSpacing: "0.15em",
               textTransform: "uppercase",
-              marginBottom: 12,
+              marginBottom: 10,
             }}
           >
-            — closed loop
+            — what mine0 can do
           </div>
           <div
             style={{
@@ -116,188 +173,98 @@ export const ClosedLoopScene: React.FC = () => {
               lineHeight: 1.1,
             }}
           >
-            Plan&nbsp;
-            <span style={{ color: THEME.accent2 }}>→</span>
-            &nbsp;Act&nbsp;
-            <span style={{ color: THEME.accent3 }}>→</span>
-            &nbsp;Verify&nbsp;
-            <span style={{ color: THEME.warn }}>→</span>
-            &nbsp;Remember&nbsp;
-            <span style={{ color: THEME.accent }}>→</span>
-            &nbsp;Replan
+            Mine0 turns open-ended Minecraft goals
+            <br />
+            into{" "}
+            <span style={{ color: THEME.mc.xpGreen }}>persistent agent work.</span>
           </div>
         </div>
 
-        {/* Cards row */}
+        {/* Advancement tiles */}
         <div
           style={{
             display: "flex",
-            alignItems: "stretch",
-            gap: 0,
+            gap: 12,
             width: "100%",
           }}
         >
-          {CARDS.map((card, i) => {
-            const startF = cardStart + i * cardStagger;
+          {TILES.map((tile, i) => {
+            const startF = 30 + i * 28;
             const s = spring({
               fps,
               frame: Math.max(0, frame - startF),
               config: { stiffness: 60, damping: 14 },
-              durationInFrames: 30,
+              durationInFrames: 26,
               from: 0,
               to: 1,
             });
-            const cardOpacity = interpolate(frame, [startF, startF + 12], [0, 1], {
-              extrapolateLeft: "clamp",
-              extrapolateRight: "clamp",
-            });
-
-            const isActive = cyclePos >= 0 && Math.floor(cyclePos) === i;
-            const activeGlow = isActive ? 0.18 : 0.06;
+            const tileOpacity = interpolate(
+              frame,
+              [startF, startF + 10],
+              [0, 1],
+              { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+            );
 
             return (
-              <React.Fragment key={i}>
-                {i > 0 && (
-                  /* Arrow between cards */
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      opacity: interpolate(
-                        frame,
-                        [cardStart + i * cardStagger - 10, cardStart + i * cardStagger + 20],
-                        [0, 1],
-                        { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-                      ),
-                      flexShrink: 0,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 36,
-                        height: 2,
-                        background: `linear-gradient(90deg, ${CARDS[i - 1].color}66, ${card.color}66)`,
-                      }}
-                    />
-                    <div style={{ color: card.color, fontSize: 20, opacity: 0.7 }}>▶</div>
-                  </div>
-                )}
+              <div
+                key={i}
+                style={{
+                  ...tileBg(tile.color),
+                  opacity: tileOpacity,
+                  transform: `translateY(${(1 - s) * 24}px)`,
+                }}
+              >
+                {/* Icon */}
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  {tile.icon}
+                </div>
+
+                {/* Title */}
                 <div
                   style={{
-                    flex: 1,
-                    opacity: cardOpacity,
-                    transform: `translateY(${(1 - s) * 30}px)`,
-                    background: `rgba(${card.color === THEME.accent2
-                      ? "124,58,237"
-                      : card.color === THEME.accent3
-                      ? "34,197,94"
-                      : card.color === THEME.warn
-                      ? "245,158,11"
-                      : "34,211,238"
-                    }, ${activeGlow})`,
-                    border: `1px solid ${card.color}${isActive ? "88" : "33"}`,
-                    borderRadius: 16,
-                    padding: "28px 24px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 12,
-                    transition: "none",
+                    fontFamily: THEME.fontSans,
+                    fontWeight: 700,
+                    fontSize: 18,
+                    color: tile.color,
+                    textAlign: "center",
+                    lineHeight: 1.2,
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 32,
-                        color: card.color,
-                        opacity: 0.9,
-                      }}
-                    >
-                      {card.icon}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: THEME.fontSans,
-                        fontWeight: 700,
-                        fontSize: 22,
-                        color: card.color,
-                      }}
-                    >
-                      {card.title}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: THEME.fontSans,
-                      fontSize: 15,
-                      color: THEME.textMuted,
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {card.description}
-                  </div>
+                  {tile.title}
                 </div>
-              </React.Fragment>
+
+                {/* Caption */}
+                <div
+                  style={{
+                    fontFamily: THEME.fontSans,
+                    fontSize: 13,
+                    color: THEME.textMuted,
+                    textAlign: "center",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {tile.caption}
+                </div>
+              </div>
             );
           })}
         </div>
 
-        {/* Loop arrow: Memory → Planner */}
-        <div
-          style={{
-            opacity: loopArrowOpacity,
-            marginTop: 20,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              width: 120,
-              height: 2,
-              background: `linear-gradient(90deg, ${THEME.accent}66, transparent)`,
-            }}
-          />
-          <div
-            style={{
-              fontFamily: THEME.fontMono,
-              fontSize: 14,
-              color: THEME.textDim,
-              letterSpacing: "0.06em",
-            }}
-          >
-            ↺&nbsp; loops back to Planner Agent
-          </div>
-          <div
-            style={{
-              flex: 1,
-              height: 2,
-              background: `linear-gradient(90deg, transparent, ${THEME.accent}66)`,
-            }}
-          />
-        </div>
-
-        {/* Caption */}
+        {/* Bottom caption */}
         <div
           style={{
             opacity: captionOpacity,
-            marginTop: 32,
+            marginTop: 36,
             textAlign: "center",
             fontFamily: THEME.fontSans,
-            fontSize: 21,
+            fontSize: 22,
             color: THEME.textMuted,
-            lineHeight: 1.4,
+            lineHeight: 1.5,
           }}
         >
-          Mine0 closes the loop:&nbsp;
+          Give it a job.{" "}
           <span style={{ color: THEME.text }}>
-            plan → act → verify → remember → replan.
+            It builds the plan, watches what happened, and keeps going.
           </span>
         </div>
       </AbsoluteFill>

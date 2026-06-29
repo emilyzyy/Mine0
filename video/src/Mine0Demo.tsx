@@ -9,45 +9,30 @@ import { MainDemoScene } from "./scenes/MainDemoScene";
 import { ClosedLoopScene } from "./scenes/ClosedLoopScene";
 import { RecoveryScene } from "./scenes/RecoveryScene";
 import { ArchitectureScene } from "./scenes/ArchitectureScene";
+import { SystemHud } from "./components/SystemHud";
 
 export const Mine0Demo: React.FC<DemoProps> = (props) => {
   return (
     <AbsoluteFill
       style={{
         background: THEME.bg,
-        ...THEME.gridBg,
         fontFamily: THEME.fontSans,
       }}
     >
-      <Sequence
-        from={SCENE_STARTS.title}
-        durationInFrames={SCENE_DURATIONS.title}
-        name="Title"
-      >
+      {/* ── Scenes ── */}
+      <Sequence from={SCENE_STARTS.title} durationInFrames={SCENE_DURATIONS.title} name="Title">
         <TitleScene />
       </Sequence>
 
-      <Sequence
-        from={SCENE_STARTS.objective}
-        durationInFrames={SCENE_DURATIONS.objective}
-        name="Objective"
-      >
+      <Sequence from={SCENE_STARTS.objective} durationInFrames={SCENE_DURATIONS.objective} name="Objective">
         <ObjectiveScene objective={props.objective} />
       </Sequence>
 
-      <Sequence
-        from={SCENE_STARTS.decisionTree}
-        durationInFrames={SCENE_DURATIONS.decisionTree}
-        name="DecisionTree"
-      >
+      <Sequence from={SCENE_STARTS.agentCrew} durationInFrames={SCENE_DURATIONS.agentCrew} name="AgentCrew">
         <DecisionTreeScene />
       </Sequence>
 
-      <Sequence
-        from={SCENE_STARTS.mainDemo}
-        durationInFrames={SCENE_DURATIONS.mainDemo}
-        name="MainDemo"
-      >
+      <Sequence from={SCENE_STARTS.mainDemo} durationInFrames={SCENE_DURATIONS.mainDemo} name="MainDemo">
         <MainDemoScene
           hasUiTree={props.hasUiTree}
           hasMcPov={props.hasMcPov}
@@ -55,28 +40,30 @@ export const Mine0Demo: React.FC<DemoProps> = (props) => {
         />
       </Sequence>
 
-      <Sequence
-        from={SCENE_STARTS.closedLoop}
-        durationInFrames={SCENE_DURATIONS.closedLoop}
-        name="ClosedLoop"
-      >
+      <Sequence from={SCENE_STARTS.useCases} durationInFrames={SCENE_DURATIONS.useCases} name="UseCases">
         <ClosedLoopScene />
       </Sequence>
 
-      <Sequence
-        from={SCENE_STARTS.recovery}
-        durationInFrames={SCENE_DURATIONS.recovery}
-        name="Recovery"
-      >
+      <Sequence from={SCENE_STARTS.recovery} durationInFrames={SCENE_DURATIONS.recovery} name="Recovery">
         <RecoveryScene />
       </Sequence>
 
-      <Sequence
-        from={SCENE_STARTS.architecture}
-        durationInFrames={SCENE_DURATIONS.architecture}
-        name="Architecture"
-      >
+      <Sequence from={SCENE_STARTS.architecture} durationInFrames={SCENE_DURATIONS.architecture} name="Architecture">
         <ArchitectureScene />
+      </Sequence>
+
+      {/* ── Persistent HUD: visible during agent crew → recovery ── */}
+      <Sequence
+        from={SCENE_STARTS.agentCrew}
+        durationInFrames={
+          SCENE_DURATIONS.agentCrew +
+          SCENE_DURATIONS.mainDemo +
+          SCENE_DURATIONS.useCases +
+          SCENE_DURATIONS.recovery
+        }
+        name="SystemHud"
+      >
+        <SystemHud />
       </Sequence>
     </AbsoluteFill>
   );

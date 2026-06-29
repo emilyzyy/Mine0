@@ -9,24 +9,30 @@ import { SceneFade } from "../components/SceneFade";
 
 const D = SCENE_DURATIONS.recovery; // 210 frames
 
-interface LogLine {
+// In-game event log style
+interface EventLine {
+  prefix: string;
   text: string;
   color: string;
-  prefix: string;
-  indent?: boolean;
+  delay: number;
+  isHighlight?: boolean;
 }
 
-const LOG_LINES: LogLine[] = [
-  { prefix: "›", text: "repetitive_action_loop detected", color: THEME.warn, indent: false },
-  { prefix: " ", text: "  scan_for_zombie repeated 3× with no position change", color: THEME.textDim, indent: true },
-  { prefix: "›", text: "verification updated: subtask advancement triggered", color: THEME.accent, indent: false },
-  { prefix: " ", text: "  active_subtask  scan_for_zombie → orient_to_zombie", color: THEME.accent3, indent: true },
-  { prefix: "›", text: "recovery subtask selected: orient_to_zombie", color: THEME.accent, indent: false },
-  { prefix: "›", text: "next plan generated — Gemma replans with updated context", color: THEME.text, indent: false },
+const EVENTS: EventLine[] = [
+  { prefix: "[WARN]", text: "got stuck repeating action",            color: THEME.warn,          delay: 20 },
+  { prefix: "     ",  text: "scan_for_zombie × 3 — no change",       color: THEME.textDim,       delay: 40 },
+  { prefix: "[VER] ", text: "verifier caught it",                    color: THEME.accent,        delay: 65 },
+  { prefix: "[MEM] ", text: "failure logged to memory",              color: THEME.mc.enchantPurp,delay: 88 },
+  { prefix: "[PLAN]", text: "new strategy selected",                 color: THEME.mc.xpGreen,    delay: 112, isHighlight: true },
+  { prefix: "     ",  text: "active_subtask → orient_to_zombie",     color: THEME.mc.xpGreen,    delay: 128 },
 ];
 
-const LINE_STAGGER = 28;
-const LINES_START = 18;
+// Seeded redstone sparks for the "strategy changed" moment
+const RSPARKS = Array.from({ length: 12 }, (_, i) => ({
+  x: 960 + (i * 127.3 - 600) % 500,
+  y: 600 + (i * 79.1 - 300) % 200,
+  color: i % 2 === 0 ? THEME.mc.redstone : THEME.mc.xpGreen,
+}));
 
 export const RecoveryScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -36,116 +42,165 @@ export const RecoveryScene: React.FC = () => {
     extrapolateRight: "clamp",
   });
 
-  // Cursor blink
-  const cursorVisible = Math.floor(frame / 12) % 2 === 0;
-  const lastLineFrame = LINES_START + (LOG_LINES.length - 1) * LINE_STAGGER;
-  const showCursor = frame <= lastLineFrame + 20;
-
-  // Caption
-  const captionOpacity = interpolate(
+  // Redstone pulse when highlight event appears
+  const highlightEvent = EVENTS.find((e) => e.isHighlight);
+  const strategyFrame = highlightEvent?.delay ?? 112;
+  const pulseFraction = interpolate(
     frame,
-    [lastLineFrame + 25, lastLineFrame + 45],
+    [strategyFrame, strategyFrame + 30],
     [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
+  const pulseGlow = interpolate(pulseFraction, [0, 0.3, 1], [0, 0.8, 0]);
+
+  // Caption
+  const captionOpacity = interpolate(frame, [170, 188], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  // Cursor blink
+  const cursorVisible = Math.floor(frame / 11) % 2 === 0;
+  const lastEvent = EVENTS[EVENTS.length - 1];
+  const showCursor = frame > lastEvent.delay && frame < lastEvent.delay + 30;
 
   return (
     <SceneFade durationInFrames={D}>
       <AbsoluteFill
         style={{
+          background: `linear-gradient(180deg, #060910 0%, #0A1020 100%)`,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "0 140px",
+          padding: "0 120px",
         }}
       >
-        {/* Header */}
+        {/* Pixel grid */}
         <div
           style={{
-            opacity: headerOpacity,
-            alignSelf: "flex-start",
-            marginBottom: 40,
+            position: "absolute",
+            inset: 0,
+            ...THEME.pixelGrid,
+            opacity: 0.25,
           }}
-        >
-          <div
-            style={{
-              fontFamily: THEME.fontMono,
-              fontSize: 16,
-              color: THEME.warn,
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-              marginBottom: 10,
-            }}
-          >
-            — recovery / replanning
-          </div>
-          <div
-            style={{
-              fontSize: 48,
-              fontWeight: 700,
-              color: THEME.text,
-              letterSpacing: "-0.02em",
-              lineHeight: 1.1,
-            }}
-          >
-            When execution stalls,
-            <br />
-            <span style={{ color: THEME.accent }}>Mine0 changes strategy.</span>
-          </div>
-        </div>
+        />
 
-        {/* Terminal window */}
+        {/* Redstone pulse flash */}
         <div
           style={{
-            width: "100%",
-            background: "rgba(0,0,0,0.65)",
-            border: `1px solid ${THEME.bgCardBorder}`,
-            borderRadius: 12,
-            overflow: "hidden",
+            position: "absolute",
+            inset: 0,
+            background: `radial-gradient(ellipse 60% 40% at 50% 70%, ${THEME.mc.xpGreen}${Math.round(pulseGlow * 80).toString(16).padStart(2, "0")} 0%, transparent 70%)`,
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Redstone sparks */}
+        {pulseFraction > 0 && pulseFraction < 0.9 && (
+          <svg
+            style={{ position: "absolute", inset: 0 }}
+            width={1920}
+            height={1080}
+          >
+            {RSPARKS.map((s, i) => {
+              const t = (pulseFraction * 30 - i * 1.5);
+              if (t < 0 || t > 20) return null;
+              const prog = t / 20;
+              const yOff = -prog * 60;
+              const op = interpolate(prog, [0, 0.2, 0.8, 1], [0, 0.9, 0.6, 0]);
+              return (
+                <rect
+                  key={i}
+                  x={s.x}
+                  y={s.y + yOff}
+                  width={5}
+                  height={5}
+                  fill={s.color}
+                  opacity={op}
+                />
+              );
+            })}
+          </svg>
+        )}
+
+        <AbsoluteFill
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            padding: "0 120px",
           }}
         >
-          {/* Chrome bar */}
+          {/* Header */}
           <div
             style={{
-              background: "#0d1520",
-              padding: "10px 16px",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              borderBottom: `1px solid ${THEME.bgCardBorder}`,
+              opacity: headerOpacity,
+              marginBottom: 36,
             }}
           >
-            {["#ff5f57", "#ffbd2e", "#28c840"].map((c) => (
-              <div
-                key={c}
-                style={{ width: 12, height: 12, borderRadius: "50%", background: c }}
-              />
-            ))}
-            <span
+            <div
               style={{
-                flex: 1,
-                textAlign: "center",
                 fontFamily: THEME.fontMono,
-                fontSize: 13,
-                color: THEME.textDim,
+                fontSize: 15,
+                color: THEME.mc.redstone,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                marginBottom: 10,
               }}
             >
-              mine0 — decision loop
-            </span>
+              — failure recovery
+            </div>
+            <div
+              style={{
+                fontSize: 50,
+                fontWeight: 700,
+                color: THEME.text,
+                letterSpacing: "-0.02em",
+                lineHeight: 1.1,
+              }}
+            >
+              Getting stuck is data.
+              <br />
+              <span style={{ color: THEME.mc.xpGreen }}>Mine0 uses it to replan.</span>
+            </div>
           </div>
 
-          {/* Log lines */}
-          <div style={{ padding: "24px 28px", minHeight: 240 }}>
-            {LOG_LINES.map((line, i) => {
-              const lineFrame = LINES_START + i * LINE_STAGGER;
+          {/* In-game event log */}
+          <div
+            style={{
+              background: "rgba(0, 0, 0, 0.7)",
+              border: `2px solid ${THEME.mc.stoneDark}`,
+              borderLeft: `4px solid ${THEME.mc.redstone}`,
+              borderTop: `2px solid ${THEME.mc.stoneLight}`,
+              borderRight: `2px solid ${THEME.mc.stoneLight}`,
+              padding: "18px 22px 18px 20px",
+            }}
+          >
+            {/* Log header */}
+            <div
+              style={{
+                fontFamily: THEME.fontMono,
+                fontSize: 12,
+                color: THEME.textDim,
+                letterSpacing: "0.1em",
+                marginBottom: 14,
+                borderBottom: `1px solid ${THEME.mc.stoneDark}`,
+                paddingBottom: 8,
+              }}
+            >
+              MINE0 AGENT LOG — RECOVERY EVENT
+            </div>
+
+            {EVENTS.map((ev, i) => {
               const lineOpacity = interpolate(
                 frame,
-                [lineFrame, lineFrame + 10],
+                [ev.delay, ev.delay + 10],
                 [0, 1],
                 { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
               );
-              const isLast = i === LOG_LINES.length - 1;
+              const isLast = i === EVENTS.length - 1;
+
               return (
                 <div
                   key={i}
@@ -153,38 +208,45 @@ export const RecoveryScene: React.FC = () => {
                     opacity: lineOpacity,
                     display: "flex",
                     alignItems: "baseline",
-                    gap: 12,
-                    marginBottom: 10,
-                    paddingLeft: line.indent ? 24 : 0,
+                    gap: 14,
+                    marginBottom: ev.isHighlight ? 2 : 8,
+                    background: ev.isHighlight
+                      ? `rgba(94,189,59,0.08)`
+                      : "transparent",
+                    padding: ev.isHighlight ? "4px 6px" : "0",
+                    borderLeft: ev.isHighlight
+                      ? `2px solid ${THEME.mc.xpGreen}`
+                      : "2px solid transparent",
                   }}
                 >
                   <span
                     style={{
                       fontFamily: THEME.fontMono,
-                      fontSize: 18,
-                      color: line.color,
-                      opacity: line.indent ? 0 : 0.9,
-                      minWidth: 16,
+                      fontSize: 14,
+                      color: ev.color,
+                      opacity: 0.8,
+                      minWidth: 58,
+                      flexShrink: 0,
                     }}
                   >
-                    {line.prefix}
+                    {ev.prefix}
                   </span>
                   <span
                     style={{
                       fontFamily: THEME.fontMono,
-                      fontSize: 18,
-                      color: line.color,
-                      lineHeight: 1.5,
+                      fontSize: 20,
+                      color: ev.color,
+                      lineHeight: 1.4,
                     }}
                   >
-                    {line.text}
+                    {ev.text}
                     {isLast && showCursor && cursorVisible && (
                       <span
                         style={{
                           display: "inline-block",
                           width: 11,
-                          height: 20,
-                          background: THEME.accent,
+                          height: 22,
+                          background: THEME.mc.xpGreen,
                           verticalAlign: "text-bottom",
                           marginLeft: 4,
                         }}
@@ -195,25 +257,74 @@ export const RecoveryScene: React.FC = () => {
               );
             })}
           </div>
-        </div>
 
-        {/* Caption */}
-        <div
-          style={{
-            opacity: captionOpacity,
-            marginTop: 32,
-            textAlign: "center",
-            fontFamily: THEME.fontSans,
-            fontSize: 20,
-            color: THEME.textMuted,
-            lineHeight: 1.4,
-          }}
-        >
-          Instead of repeating the same action,{" "}
-          <span style={{ color: THEME.accent }}>
-            Mine0 detects the loop and advances to the next subtask.
-          </span>
-        </div>
+          {/* HUD tag */}
+          <div
+            style={{
+              opacity: interpolate(frame, [155, 172], [0, 1], {
+                extrapolateLeft: "clamp",
+                extrapolateRight: "clamp",
+              }),
+              marginTop: 16,
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap" as const,
+            }}
+          >
+            {[
+              { text: "failure → memory", color: THEME.mc.enchantPurp },
+              { text: "→", color: THEME.textDim },
+              { text: "memory → new plan", color: THEME.mc.xpGreen },
+              { text: "→", color: THEME.textDim },
+              { text: "subgoal regenerated", color: THEME.accent },
+            ].map((item, i) =>
+              item.text === "→" ? (
+                <span
+                  key={i}
+                  style={{
+                    fontFamily: THEME.fontMono,
+                    fontSize: 16,
+                    color: item.color,
+                  }}
+                >
+                  →
+                </span>
+              ) : (
+                <div
+                  key={i}
+                  style={{
+                    fontFamily: THEME.fontMono,
+                    fontSize: 13,
+                    color: item.color,
+                    padding: "4px 12px",
+                    background: `${item.color}11`,
+                    border: `1px solid ${item.color}33`,
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {item.text}
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Caption */}
+          <div
+            style={{
+              opacity: captionOpacity,
+              marginTop: 28,
+              textAlign: "center",
+              fontFamily: THEME.fontSans,
+              fontSize: 21,
+              color: THEME.textMuted,
+            }}
+          >
+            Instead of repeating the same action,{" "}
+            <span style={{ color: THEME.mc.xpGreen }}>
+              Mine0 changes strategy.
+            </span>
+          </div>
+        </AbsoluteFill>
       </AbsoluteFill>
     </SceneFade>
   );
