@@ -1,4 +1,5 @@
 import type { WorldState } from "../contracts/index.ts";
+import type { ExecutorKind } from "../executor/executor_interface.ts";
 import { CerebrasClient, type ProviderCallMeta } from "../planner/cerebras_client.ts";
 import { perceptionUserPrompt, perceptionSystemPrompt } from "../planner/planner_prompts.ts";
 import { perceptionSchema } from "../planner/planner_schemas.ts";
@@ -19,10 +20,11 @@ export class PerceptionService {
 
   async perceive(
     worldState: WorldState,
+    executorKind: ExecutorKind = "mineflayer",
   ): Promise<{ result: PerceptionResult; meta: ProviderCallMeta }> {
     if (!this.config.modelPerceptionEnabled) {
       return {
-        result: this.heuristicPerception(worldState),
+        result: this.heuristicPerception(worldState, executorKind),
         meta: {
           label: "perception_local",
           provider: "mock",
@@ -31,13 +33,16 @@ export class PerceptionService {
           latencyMs: 0,
           usage: null,
           timeInfo: null,
-          warning: "Model perception disabled to conserve tokens; using Mineflayer structured state.",
+          warning:
+            executorKind === "jarvis"
+              ? "Model perception disabled to conserve tokens; using structured observation cues tailored for the JARVIS route."
+              : "Model perception disabled to conserve tokens; using Mineflayer structured state.",
         },
       };
     }
 
     const content = await this.client.buildUserContent(
-      perceptionUserPrompt(worldState),
+      perceptionUserPrompt(worldState, executorKind),
     );
 
     const response = await this.client.requestStructured<PerceptionResult>({
@@ -47,7 +52,7 @@ export class PerceptionService {
       messages: [
         {
           role: "system",
-          content: perceptionSystemPrompt(),
+          content: perceptionSystemPrompt(executorKind),
         },
         {
           role: "user",
@@ -66,12 +71,12 @@ export class PerceptionService {
     }
 
     return {
-      result: this.heuristicPerception(worldState),
+      result: this.heuristicPerception(worldState, executorKind),
       meta: response.meta,
     };
   }
 
-  private heuristicPerception(worldState: WorldState): PerceptionResult {
+  private heuristicPerception(worldState: WorldState, executorKind: ExecutorKind): PerceptionResult {
     const visibleResources = [...worldState.perceivedResources];
     const terrainAffordances = worldState.interactionHints.length > 0
       ? [...worldState.interactionHints]
@@ -87,8 +92,12 @@ export class PerceptionService {
       ),
     ].slice(0, 6);
     const confidenceNotes = [
-      "Perception is derived from Mineflayer structured state only.",
-      "Planner receives structured Mineflayer cues for nearby blocks, entities, line of sight, and interaction affordances.",
+      executorKind === "jarvis"
+        ? "Perception is derived from structured observation cues prepared for the JARVIS route."
+        : "Perception is derived from Mineflayer structured state only.",
+      executorKind === "jarvis"
+        ? "Planner receives nearby, visible, and reachable cues that a JARVIS-style visual-control executor can act on."
+        : "Planner receives structured Mineflayer cues for nearby blocks, entities, line of sight, and interaction affordances.",
     ];
 
     return {

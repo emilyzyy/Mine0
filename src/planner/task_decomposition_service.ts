@@ -1,5 +1,6 @@
 import type { SubgoalIntent } from "../contracts/subgoal_intent.ts";
 import type { WorldState } from "../contracts/world_state.ts";
+import type { ExecutorKind } from "../executor/executor_interface.ts";
 import {
   CerebrasClient,
   type ProviderCallMeta,
@@ -134,6 +135,7 @@ export class TaskDecompositionService {
     objective: string,
     worldState: WorldState,
     memorySummary: string[] = [],
+    executorKind: ExecutorKind = "mineflayer",
   ): Promise<{ subtasks: Subtask[] | null; meta: ProviderCallMeta }> {
     if (!this.client.config.apiKey) {
       return {
@@ -156,8 +158,8 @@ export class TaskDecompositionService {
       schemaName: "task_decomposition",
       schema: taskDecompositionSchema,
       messages: [
-        { role: "system", content: taskDecompositionSystemPrompt() },
-        { role: "user", content: taskDecompositionUserPrompt(objective, worldState, memorySummary) },
+        { role: "system", content: taskDecompositionSystemPrompt(executorKind) },
+        { role: "user", content: taskDecompositionUserPrompt(objective, worldState, memorySummary, executorKind) },
       ],
       maxOutputTokens: 2048,
       temperature: 0.2,
@@ -185,6 +187,7 @@ export class TaskDecompositionService {
     failureReason: string,
     worldState: WorldState,
     intent: SubgoalIntent,
+    executorKind: ExecutorKind = "mineflayer",
   ): Promise<{ subtasks: Subtask[]; meta: ProviderCallMeta }> {
     if (!this.client.config.apiKey) {
       return {
@@ -208,10 +211,17 @@ export class TaskDecompositionService {
       schemaName: "task_refinement",
       schema: taskRefinementSchema,
       messages: [
-        { role: "system", content: taskRefinementSystemPrompt() },
+        { role: "system", content: taskRefinementSystemPrompt(executorKind) },
         {
           role: "user",
-          content: taskRefinementUserPrompt(objective, worldState, taskContext, failureReason, failedAction),
+          content: taskRefinementUserPrompt(
+            objective,
+            worldState,
+            taskContext,
+            failureReason,
+            failedAction,
+            executorKind,
+          ),
         },
       ],
       maxOutputTokens: 1024,

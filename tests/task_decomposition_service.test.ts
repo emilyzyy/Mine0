@@ -283,3 +283,56 @@ test("TaskStackService prependSubtasks inserts LLM refinement before active head
     ["locate_water", "place_boat"],
   );
 });
+
+test("TaskStackService expands missing prerequisites for LLM-planned place subtasks", () => {
+  const stack = new TaskStackService();
+  stack.reset(
+    "mine for diamonds",
+    {
+      timestamp: new Date().toISOString(),
+      userObjective: "mine for diamonds",
+      position: { x: 0, y: 64, z: 0 },
+      biomeOrRegionHint: "plains",
+      health: 20,
+      hunger: 20,
+      inventory: [{ item: "planks", count: 36 }],
+      equippedItem: "air",
+      timeOfDay: "day",
+      sceneSummary: null,
+      visibleHazards: [],
+      perceivedResources: [],
+      nearbyBlocks: ["grass"],
+      nearbyEntities: [],
+      lineOfSightTarget: "grass",
+      interactionHints: ["can_place_crafting_table"],
+      goalProgress: 0,
+    },
+    {
+      llmSubtasks: normalizeLlmSubtasks(
+        [
+          rawSubtask({
+            id: "place_crafting_table",
+            description: "Place a crafting table to enable tool crafting",
+            planningFocus: "place one crafting_table nearby",
+            expectedAction: "place",
+            targetItem: "crafting_table",
+          }),
+          rawSubtask({
+            id: "craft_wooden_pickaxe",
+            description: "Craft a wooden pickaxe",
+            planningFocus: "craft one wooden_pickaxe",
+            expectedAction: "craft",
+            targetItem: "wooden_pickaxe",
+          }),
+        ],
+        "mine for diamonds",
+      ),
+    },
+  );
+
+  const context = stack.getContext();
+  assert.deepEqual(
+    context.pendingSubtasks.slice(0, 3).map((entry) => entry.id),
+    ["craft_crafting_table", "place_crafting_table", "craft_wooden_pickaxe"],
+  );
+});

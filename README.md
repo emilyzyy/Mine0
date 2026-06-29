@@ -16,6 +16,7 @@ Phase 0+ scaffold for the Mine0 project plan: shared contracts, schema validatio
 - canonical contracts for `WorldState`, `CandidateAction`, `PredictedFuture`, `SubgoalIntent`, `ActionOutcome`, and `MemoryEntry`
 - zero-dependency runtime validation and parsing
 - executor abstraction with `jarvis` mock and `mineflayer` live-or-mock backends
+- shared Gemma task decomposition, refinement, and task-stack flow for both routes, with route-specific prompt context
 - Cerebras-backed perception, planning, rollout, and critic services with mock fallback
 - end-to-end decision loop driven by a freeform objective
 - simple HTTP server with a prompt box and live branch/output view
@@ -137,6 +138,7 @@ node --experimental-strip-types --test tests/*.test.ts
 
 - `jarvis` is still a mock executor.
 - `mineflayer` now supports a real local bot session when the Mineflayer environment variables are configured, and otherwise falls back to the mock world so tests and local exploration stay stable.
+- Backend choice is explicit per run. Mine0 does not auto-switch between Jarvis and Mineflayer mid-run, and it always executes the first selected planner approach.
 - The planner reads `CEREBRAS_API_KEY`, `CEREBRAS_MODEL`, and `CEREBRAS_FALLBACK_MODEL` from the environment. If no API key is set, the app falls back to heuristic planner-side behavior.
 - If `MINE0_SCREENSHOT_DIR` contains `.png`, `.jpg`, `.jpeg`, or `.webp` frames, the mock executor will use those files as the screenshot input in lexicographic order instead of the placeholder frame.
 - `CEREBRAS_ENABLE_IMAGE_INPUT=1` will attach those screenshots to the Cerebras perception prompt.

@@ -57,7 +57,12 @@ export class Mine0App {
       let latestObservation = await executor.observe(input.objective);
       let latestWorldState = parseWorldState(latestObservation.worldState);
 
-      const decomposition = await this.taskDecomposition.decomposeObjective(input.objective, latestWorldState);
+      const decomposition = await this.taskDecomposition.decomposeObjective(
+        input.objective,
+        latestWorldState,
+        [],
+        input.executorKind,
+      );
       this.taskStack.reset(input.objective, latestWorldState, {
         llmSubtasks: decomposition.subtasks?.length ? decomposition.subtasks : undefined,
       });
@@ -69,7 +74,7 @@ export class Mine0App {
 
       for (let stepNumber = 1; stepNumber <= this.config.maxDecisionSteps && !completedObjective; stepNumber += 1) {
         const recentHistorySummary = buildRecentHistorySummary(steps);
-        const perceptionStep = await this.perception.perceive(latestWorldState);
+        const perceptionStep = await this.perception.perceive(latestWorldState, input.executorKind);
         const worldState = parseWorldState({
           ...latestWorldState,
           sceneSummary: perceptionStep.result.sceneSummary,
@@ -83,6 +88,7 @@ export class Mine0App {
           perceptionStep.result,
           recentHistorySummary,
           taskContext,
+          input.executorKind,
         );
         const selectedPlan = this.selectPlan(worldState, proposalStep.proposals);
         const plannedFuture = selectedPlan.future;
@@ -153,6 +159,7 @@ export class Mine0App {
             actionOutcome.failureReason ?? "unknown failure",
             latestWorldState,
             selectedIntent,
+            input.executorKind,
           );
           if (refinement.subtasks.length > 0) {
             this.taskStack.prependSubtasks(refinement.subtasks);

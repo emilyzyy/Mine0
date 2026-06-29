@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { TaskStackService } from "../src/planner/task_stack_service.ts";
+import { normalizeLlmSubtasks } from "../src/planner/task_decomposition_service.ts";
 
 test("TaskStackService decomposes place doors around yourself into sequential door placements", () => {
   const stack = new TaskStackService();
@@ -463,5 +464,167 @@ test("TaskStackService skips generic craft work when its artifact already exists
 
   assert.equal(stack.getContext().activeSubtask?.expectedAction, "place");
   assert.equal(stack.getContext().completedSubtasks.filter((task) => task.expectedAction === "craft").length, 1);
+});
+
+test("TaskStackService keeps downstream LLM subtasks pending until earlier ones finish", () => {
+  const stack = new TaskStackService();
+  stack.reset(
+    "mine for diamonds",
+    {
+      timestamp: new Date().toISOString(),
+      userObjective: "mine for diamonds",
+      position: { x: 0, y: 64, z: 0 },
+      biomeOrRegionHint: "forest_edge",
+      health: 20,
+      hunger: 20,
+      inventory: [{ item: "planks", count: 36 }],
+      equippedItem: "air",
+      timeOfDay: "day",
+      sceneSummary: null,
+      visibleHazards: [],
+      perceivedResources: ["oak_tree"],
+      nearbyBlocks: ["grass", "log"],
+      nearbyEntities: [],
+      lineOfSightTarget: "oak_tree",
+      interactionHints: ["tree_visible"],
+      goalProgress: 0,
+    },
+    {
+      llmSubtasks: normalizeLlmSubtasks(
+        [
+          {
+            id: "locate_logs",
+            description: "Find nearby trees to obtain logs for sticks",
+            planningFocus: "find nearby trees to obtain logs for sticks",
+            expectedAction: "explore",
+            targetItem: "oak_log",
+            targetCount: 2,
+            destination: "surface",
+          },
+          {
+            id: "collect_logs",
+            description: "Collect logs for crafting sticks",
+            planningFocus: "collect logs for crafting sticks",
+            expectedAction: "collect",
+            targetItem: "oak_log",
+            targetCount: 2,
+            destination: "surface",
+          },
+          {
+            id: "craft_sticks",
+            description: "Craft sticks from planks",
+            planningFocus: "craft sticks from planks",
+            expectedAction: "craft",
+            targetItem: "stick",
+            targetCount: 2,
+            destination: "",
+          },
+        ],
+        "mine for diamonds",
+      ),
+    },
+  );
+
+  const context = stack.getContext();
+  assert.equal(context.activeSubtask?.id, "locate_logs");
+  assert.equal(context.completedSubtasks.some((task) => task.id === "collect_logs"), false);
+  assert.equal(context.completedSubtasks.some((task) => task.id === "craft_sticks"), false);
+});
+
+test("TaskStackService advances from locate to collect after successful collection proves visibility", () => {
+  const stack = new TaskStackService();
+  stack.reset(
+    "mine for diamonds",
+    {
+      timestamp: new Date().toISOString(),
+      userObjective: "mine for diamonds",
+      position: { x: 0, y: 64, z: 0 },
+      biomeOrRegionHint: "forest_edge",
+      health: 20,
+      hunger: 20,
+      inventory: [{ item: "planks", count: 36 }],
+      equippedItem: "air",
+      timeOfDay: "day",
+      sceneSummary: null,
+      visibleHazards: [],
+      perceivedResources: ["oak_tree"],
+      nearbyBlocks: ["grass", "log"],
+      nearbyEntities: [],
+      lineOfSightTarget: "oak_tree",
+      interactionHints: ["tree_visible"],
+      goalProgress: 0,
+    },
+    {
+      llmSubtasks: normalizeLlmSubtasks(
+        [
+          {
+            id: "locate_logs",
+            description: "Find nearby trees to obtain logs for sticks",
+            planningFocus: "find nearby trees to obtain logs for sticks",
+            expectedAction: "explore",
+            targetItem: "oak_log",
+            targetCount: 2,
+            destination: "surface",
+          },
+          {
+            id: "collect_logs",
+            description: "Collect logs for crafting sticks",
+            planningFocus: "collect logs for crafting sticks",
+            expectedAction: "collect",
+            targetItem: "oak_log",
+            targetCount: 2,
+            destination: "surface",
+          },
+        ],
+        "mine for diamonds",
+      ),
+    },
+  );
+
+  stack.onStepComplete(
+    {
+      objective: "mine for diamonds",
+      instruction: "Collect oak_log",
+      candidateAction: {
+        name: "collect",
+        arguments: { block_type: "oak_log", count: 1 },
+        reason: "visible tree",
+      },
+      successCondition: { item: "oak_log", count: 1 },
+      maximumSteps: 120,
+    },
+    {
+      status: "success",
+      positionDelta: { x: 0, y: 0, z: 1 },
+      inventoryDelta: [{ item: "oak_log", countChange: 1 }],
+      failureReason: null,
+    },
+    {
+      timestamp: new Date().toISOString(),
+      userObjective: "mine for diamonds",
+      position: { x: 1, y: 64, z: 1 },
+      biomeOrRegionHint: "forest_edge",
+      health: 20,
+      hunger: 20,
+      inventory: [
+        { item: "planks", count: 36 },
+        { item: "oak_log", count: 1 },
+      ],
+      equippedItem: "air",
+      timeOfDay: "day",
+      sceneSummary: null,
+      visibleHazards: [],
+      perceivedResources: ["oak_tree"],
+      nearbyBlocks: ["grass", "log"],
+      nearbyEntities: [],
+      lineOfSightTarget: "oak_tree",
+      interactionHints: ["tree_visible"],
+      goalProgress: 0.1,
+    },
+  );
+
+  const context = stack.getContext();
+  assert.equal(context.completedSubtasks.some((task) => task.id === "locate_logs"), true);
+  assert.equal(context.activeSubtask?.id, "collect_logs");
 });
 

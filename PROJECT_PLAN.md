@@ -7,7 +7,7 @@ Until API-usage limits are loosened, the live codebase should stay in `single-de
 - Generate one planner proposal per cycle.
 - Take the first valid approach instead of running parallel planner branches.
 - Skip rollout and critic fan-out in the live execution path for now.
-- Keep perception structured and Mineflayer-native; do not reintroduce screenshots as planner input.
+- Keep perception structured; adapt prompt framing to the active backend rather than reintroducing screenshots as planner input.
 
 ## Working Title
 
@@ -69,7 +69,7 @@ This is an online planning loop with in-context adaptation through memory, not g
 
 ## Execution Backends
 
-Mine0 supports two interchangeable embodiment backends.
+Mine0 supports two interchangeable embodiment backends, but each run should execute exactly one explicitly selected backend.
 
 ### Option A: JARVIS-VLA
 
@@ -141,7 +141,7 @@ Recommended sequencing:
 - attempt JARVIS-VLA integration first
 - maintain Mineflayer as the fallback executor for demo reliability
 
-Keep the abstraction boundary clean so both backends can share the same planner contracts.
+Keep the abstraction boundary clean so both backends can share the same planner contracts, LLM task decomposition, and task-stack logic while still receiving backend-specific prompt framing.
 
 ## Role Split
 
@@ -670,7 +670,7 @@ Build:
 
 Success criteria:
 
-- planner can swap between JARVIS and Mineflayer without changing upstream contracts
+- planner can target either JARVIS or Mineflayer without changing upstream contracts or introducing runtime route arbitration
 
 ## Risks and Mitigations
 
@@ -738,4 +738,4 @@ The next concrete build target should be:
 
 ## One-Sentence Summary
 
-Mine0 is a Minecraft embodied agent architecture where a user gives a natural-language objective in a prompt box, Gemma on Cerebras imagines several structured futures in parallel, selects the best next action, executes it through JARVIS if possible or Mineflayer as backup, verifies what actually happened, and improves through memory-driven replanning.
+Mine0 is a Minecraft embodied agent architecture where a user gives a natural-language objective in a prompt box, Gemma on Cerebras plans the next bounded action, executes it through the explicitly selected JARVIS or Mineflayer route, verifies what actually happened, and improves through memory-driven replanning.

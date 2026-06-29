@@ -1,5 +1,6 @@
 import type { CandidateAction, WorldState } from "../contracts/index.ts";
 import type { PredictedFuture } from "../contracts/index.ts";
+import type { ExecutorKind } from "../executor/executor_interface.ts";
 import type { PerceptionResult } from "../perception/perception_service.ts";
 import type { TaskPlanningContext } from "./task_stack_service.ts";
 import { actionAllowedForActiveSubtask, remainingSubtaskCount } from "./subtask_progress.ts";
@@ -424,6 +425,17 @@ function canSeeTargetBlock(worldState: WorldState, blockType: string): boolean {
     worldState.lineOfSightTarget ?? "",
   ].map((entry) => entry.toLowerCase());
   return aliases.some((alias) => haystack.some((entry) => entry.includes(alias)));
+}
+
+function visibleTargetForActiveSubtask(
+  worldState: WorldState,
+  activeSubtask: TaskPlanningContext["activeSubtask"],
+): boolean {
+  if (!activeSubtask?.targetItem) {
+    return false;
+  }
+
+  return canSeeTargetBlock(worldState, activeSubtask.targetItem);
 }
 
 function totalWoodResources(worldState: WorldState): number {
@@ -908,8 +920,16 @@ export class PlannerService {
     memorySummary: string[],
     perception: PerceptionResult,
     recentHistorySummary: string[] = [],
+    executorKind: ExecutorKind = "mineflayer",
   ): Promise<{ proposal: PlannerProposal; meta: ProviderCallMeta[] }> {
-    const proposed = await this.proposeCandidates(worldState, memorySummary, perception, recentHistorySummary);
+    const proposed = await this.proposeCandidates(
+      worldState,
+      memorySummary,
+      perception,
+      recentHistorySummary,
+      null,
+      executorKind,
+    );
     const fallback = this.heuristicPlan(worldState, memorySummary, recentHistorySummary)[0];
     if (!fallback) {
       throw new Error("Planner heuristic fallback did not produce any proposals.");
@@ -926,6 +946,7 @@ export class PlannerService {
     perception: PerceptionResult,
     recentHistorySummary: string[] = [],
     taskContext: TaskPlanningContext | null = null,
+    executorKind: ExecutorKind = "mineflayer",
   ): Promise<{ proposals: PlannerProposal[]; meta: ProviderCallMeta[] }> {
     const planningObjective = taskContext?.activeSubtask?.planningFocus ?? worldState.userObjective;
     const planningState: WorldState = {
@@ -959,33 +980,38 @@ export class PlannerService {
       messages: [
         {
           role: "system",
-          content: plannerSystemPrompt("choose one bounded first action only"),
+          content: plannerSystemPrompt("choose one bounded first action only", executorKind),
         },
         {
           role: "user",
-          content: plannerUserPrompt(worldState, perception, memorySummary, recentHistorySummary, taskContext),
+          content: plannerUserPrompt(
+            worldState,
+            perception,
+            memorySummary,
+            recentHistorySummary,
+            taskContext,
+            executorKind,
+          ),
         },
       ],
       maxOutputTokens: 600,
       temperature: 0.15,
     });
     const liveProposal = result.data ? this.fromStructured(result.data) : null;
-    const liveProposals =
+    const proposals =
       liveProposal && !this.shouldOverrideStructuredProposal(planningState, liveProposal, memorySummary, taskContext)
         ? [liveProposal]
-        : [];
-    const logs = countItem(planningState, "oak_log");
-    const proposals = finalizeHeuristicProposals(
-      filterProposalsForActiveSubtask(
-        [...liveProposals, ...heuristic],
-        taskContext,
-        planningState,
-      ),
-      planningState,
-      memorySummary,
-      taskContext,
-      recentHistorySummary,
-    ).slice(0, 1);
+        : finalizeHeuristicProposals(
+            filterProposalsForActiveSubtask(
+              heuristic,
+              taskContext,
+              planningState,
+            ),
+            planningState,
+            memorySummary,
+            taskContext,
+            recentHistorySummary,
+          ).slice(0, 1);
 
     return {
       proposals,
@@ -1476,52 +1502,35 @@ export class PlannerService {
       return true;
     }
 
-    const profile = inferFocusProfile(worldState.userObjective, taskContext?.activeSubtask ?? null);
-    if (proposal.candidateAction.name === "scan" && hasRecentFailedScan(memorySummary)) {
-      return true;
-    }
-
+    const actionName = proposal.candidateAction.name;
+    const activeSubtask = taskContext?.activeSubtask ?? null;
+    const activeFocus = activeSubtask?.planningFocus.toLowerCase() ?? "";
+    const locateStyleSubtask =
+      activeSubtask?.expectedAction === "explore" ||
+      activeSubtask?.expectedAction === "scan" ||
+      /\b(locate|search|pathfind|reach|find)\b/.test(activeFocus);
     if (
-      (proposal.candidateAction.name === "scan" || proposal.candidateAction.name === "explore") &&
-      worldState.perceivedResources.includes("oak_tree")
-    ) {
-      return true;
-    }
-
-    if (
-      proposal.candidateAction.name === "place" &&
-      shouldBlockCraftingTablePlace(memorySummary, worldState)
-    ) {
-      return true;
-    }
-
-    if (
-      canPlaceCraftingTableOnFloor(worldState) &&
-      (proposal.candidateAction.name === "explore" || proposal.candidateAction.name === "scan")
-    ) {
-      return true;
-    }
-
-    if (
-      profile.searchDomain === "subterranean" &&
-      proposal.candidateAction.name === "collect" &&
-      String(proposal.candidateAction.arguments.block_type ?? "") === "oak_log" &&
-      hasEnoughWoodForEarlyTools(worldState)
+      locateStyleSubtask &&
+      visibleTargetForActiveSubtask(worldState, activeSubtask) &&
+      (actionName === "explore" || actionName === "scan")
     ) {
       return true;
     }
 
     const craftItem = String(proposal.candidateAction.arguments.item ?? "");
-    if (
-      proposal.candidateAction.name === "craft" &&
-      craftItem === "crafting_table" &&
-      (hasNearbyCraftingTable(worldState) || hasCraftingTableInInventory(worldState))
-    ) {
+    if (actionName === "collect" && taskContext?.activeSubtask?.targetItem) {
+      const remaining = remainingSubtaskCount(taskContext.activeSubtask, worldState.inventory);
+      if (remaining <= 0) {
+        return true;
+      }
+    }
+
+    if (actionName === "craft" && !craftItem) {
       return true;
     }
 
     if (
-      proposal.candidateAction.name === "craft" &&
+      actionName === "craft" &&
       requiresPlacedCraftingTable(craftItem) &&
       !hasNearbyCraftingTable(worldState)
     ) {
@@ -1529,42 +1538,38 @@ export class PlannerService {
     }
 
     if (
-      proposal.candidateAction.name === "place" &&
-      !destinationReadyForPlacement(worldState, null, worldState.userObjective.toLowerCase())
-    ) {
-      return true;
-    }
-
-    if (
-      proposal.candidateAction.name === "smelt" &&
+      actionName === "smelt" &&
       !worldState.interactionHints.includes("furnace_nearby")
     ) {
       return true;
     }
 
     if (
-      proposal.candidateAction.name === "craft" &&
-      craftItem === "crafting_table" &&
-      objectiveWantsDoorPlacement(worldState.userObjective) &&
-      countItem(worldState, "wooden_door") >= 1
+      actionName === "smelt" &&
+      countItem(worldState, String(proposal.candidateAction.arguments.input_item ?? "")) < 1
     ) {
       return true;
     }
 
     if (
-      proposal.candidateAction.name === "craft" &&
-      objectiveWantsDoor(worldState.userObjective) &&
-      countItem(worldState, "wooden_door") >= 1 &&
-      !craftItem.includes("door")
+      actionName === "place" &&
+      countItem(worldState, String(proposal.candidateAction.arguments.block_type ?? "")) < 1
     ) {
       return true;
     }
 
     if (
-      proposal.candidateAction.name === "craft" &&
-      objectiveWantsDoorsAround(worldState.userObjective) &&
-      countItem(worldState, "wooden_door") >= 1
+      actionName === "place" &&
+      !destinationReadyForPlacement(
+        worldState,
+        taskContext?.activeSubtask ?? null,
+        taskContext?.activeSubtask?.planningFocus ?? worldState.userObjective.toLowerCase(),
+      )
     ) {
+      return true;
+    }
+
+    if (actionName === "scan" && hasRecentFailedScan(memorySummary)) {
       return true;
     }
 

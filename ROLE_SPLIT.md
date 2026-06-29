@@ -52,5 +52,6 @@ Expected next replacements:
 
 - Shared contract changes should be coordinated and reviewed first.
 - Keep executor-specific details out of planner modules.
+- Keep runtime backend selection explicit. Do not add automatic multi-route arbitration between Jarvis and Mineflayer inside the planner loop.
 - Keep provider-specific prompting details out of executor modules.
 - Add new fields to contracts only when they are needed by both roles or by the prompt-box/dashboard boundary.

@@ -15,6 +15,7 @@ import {
   expandGoalPrerequisites,
   expandObtainItemChain,
   inventoryHasItem,
+  isTargetVisibleForItem,
   locateSearchSatisfied,
   parseGoalFromObjective,
   placeFailureNeedsLocateDestination,
@@ -311,6 +312,28 @@ function makeCraftSubtask(id: string, description: string, item: string): Subtas
   };
 }
 
+function buildMissingPlacementPrerequisites(subtask: Subtask, worldState: WorldState): Subtask[] {
+  const targetItem = subtask.targetItem?.toLowerCase();
+  if (!targetItem || inventoryHasItem(worldState.inventory, targetItem)) {
+    return [];
+  }
+
+  if (targetItem === "crafting_table") {
+    const planks = countInventoryItem(worldState.inventory, "planks");
+    const logs = countInventoryItem(worldState.inventory, "oak_log");
+    const tasks: Subtask[] = [];
+    if (planks < 4 && logs > 0) {
+      tasks.push(makeCraftSubtask("craft_planks_for_workstation", "Craft planks for a crafting table", "planks"));
+    }
+    if (planks >= 4 || logs > 0) {
+      tasks.push(makeCraftSubtask("craft_crafting_table", "Craft a crafting table", "crafting_table"));
+    }
+    return tasks;
+  }
+
+  return [];
+}
+
 function makeCollectSubtask(id: string, description: string, focus: string): Subtask {
   return {
     id,
@@ -568,6 +591,20 @@ function stepSatisfiesSubtask(
     }
     return locateSearchSatisfied(subtask, outcome, worldState);
   }
+  if (
+    (subtask.expectedAction === "explore" || /(locate|search|pathfind|reach)\b/.test(subtask.planningFocus.toLowerCase())) &&
+    actionName === "collect"
+  ) {
+    const targetItem = (subtask.targetItem ?? String(intent.candidateAction.arguments.block_type ?? "")).toLowerCase();
+    if (!targetItem) {
+      return false;
+    }
+
+    const matchedCollection = outcome.inventoryDelta.some((entry) =>
+      entry.countChange > 0 && entry.item.toLowerCase() === targetItem,
+    );
+    return matchedCollection || isTargetVisibleForItem(worldState, targetItem);
+  }
   const focus = subtask.planningFocus.toLowerCase();
   const craftItem = String(intent.candidateAction.arguments.item ?? "").toLowerCase();
 
@@ -712,11 +749,15 @@ export class TaskStackService {
     }
 
     const active = this.pending[0];
+    const existingIds = new Set(this.pending.map((subtask) => subtask.id));
     const normalized = subtasks.map((subtask) => ({
       ...subtask,
       compound: false,
       parentId: subtask.parentId ?? active?.parentId ?? "goal",
-    }));
+    })).filter((subtask) => !existingIds.has(subtask.id));
+    if (normalized.length === 0) {
+      return;
+    }
     this.registerTasks(normalized);
     this.pending = [...normalized, ...this.pending];
   }
@@ -735,13 +776,6 @@ export class TaskStackService {
       return expandCompoundSubtask(rootSubtask, worldState, this.satisfiedDestinationLocates);
     });
     this.registerTasks(rebuilt);
-
-    for (const task of rebuilt) {
-      if (this.isSatisfiedByWorld(task, worldState) && !completedIds.has(task.id)) {
-        this.completed.push(task);
-        completedIds.add(task.id);
-      }
-    }
 
     const seen = new Set<string>();
     this.pending = rebuilt.filter((subtask) => {
@@ -975,10 +1009,6 @@ export class TaskStackService {
   }
 
   private expandPendingHead(worldState: WorldState): void {
-    if (this.llmPlanned) {
-      return;
-    }
-
     while (this.pending[0]?.compound) {
       const head = this.pending[0];
       if (!head) {
@@ -1016,6 +1046,13 @@ export class TaskStackService {
     }
 
     if (head.expectedAction === "place" || head.expectedAction === "use") {
+      const missingPlacementPrerequisites = buildMissingPlacementPrerequisites(head, worldState);
+      if (missingPlacementPrerequisites.length > 0) {
+        this.registerTasks(missingPlacementPrerequisites);
+        this.pending = [...missingPlacementPrerequisites, ...this.pending];
+        return;
+      }
+
       const withObtain = expandGoalPrerequisites(head, worldState, this.satisfiedDestinationLocates);
       if (withObtain.length > 1) {
         this.registerTasks(withObtain);
@@ -1031,6 +1068,7 @@ export class TaskStackService {
 
     const withPrerequisites = prependWorkstationPrerequisites(worldState, [head]);
     if (withPrerequisites.length > 1) {
+      this.registerTasks(withPrerequisites);
       this.pending = [...withPrerequisites, ...this.pending.slice(1)];
     }
   }

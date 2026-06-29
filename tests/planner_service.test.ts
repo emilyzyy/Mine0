@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { plannerUserPrompt } from "../src/planner/planner_prompts.ts";
+import { plannerSystemPrompt, plannerUserPrompt } from "../src/planner/planner_prompts.ts";
 
 process.env.CEREBRAS_API_KEY = "";
 
@@ -482,6 +482,293 @@ test("plannerUserPrompt bounds repeated context while retaining recent diagnosti
   assert.doesNotMatch(prompt, /block_20/);
   assert.doesNotMatch(prompt, /verbose_note_0/);
   assert.ok(prompt.length < 3_500, `compact planner prompt was ${prompt.length} characters`);
+});
+
+test("planner prompts frame Jarvis as the active executor route", () => {
+  const systemPrompt = plannerSystemPrompt("choose one bounded first action only", "jarvis");
+  const userPrompt = plannerUserPrompt(
+    {
+      timestamp: new Date().toISOString(),
+      userObjective: "gather wood and make a crafting table",
+      position: { x: 0, y: 64, z: 0 },
+      biomeOrRegionHint: "forest_edge",
+      health: 20,
+      hunger: 20,
+      inventory: [],
+      equippedItem: "air",
+      timeOfDay: "day",
+      sceneSummary: null,
+      visibleHazards: [],
+      perceivedResources: ["oak_tree"],
+      nearbyBlocks: ["grass", "log"],
+      nearbyEntities: [],
+      lineOfSightTarget: "oak_tree",
+      interactionHints: ["tree_visible"],
+      goalProgress: 0.1,
+    },
+    {
+      sceneSummary: "A visible tree is nearby.",
+      visibleResources: ["oak_tree"],
+      terrainAffordances: ["open_ground"],
+      hazards: [],
+      reachableTargets: ["oak_tree"],
+      confidenceNotes: [],
+    },
+    [],
+    [],
+    null,
+    "jarvis",
+  );
+
+  assert.match(systemPrompt, /JARVIS-VLA visual-control route/);
+  assert.match(systemPrompt, /Do not depend on Mineflayer-only implementation details/);
+  assert.match(userPrompt, /Executor route: JARVIS-VLA visual-control route/);
+});
+
+test("PlannerService uses a state-compatible live LLM proposal without heuristic replacement", async () => {
+  const { PlannerService } = await import("../src/planner/planner_service.ts");
+
+  const planner = new PlannerService() as PlannerService & {
+    client: {
+      config: { provider: "cerebras" };
+      requestStructured: () => Promise<{
+        data: {
+          plannerId: string;
+          strategy: string;
+          instruction: string;
+          actionName: string;
+          blockType: string;
+          item: string;
+          count: number;
+          direction: string;
+          location: string;
+          reason: string;
+          successItem: string;
+          successCount: number;
+          maximumSteps: number;
+        };
+        meta: {
+          label: string;
+          provider: "cerebras";
+          model: string;
+          status: "success";
+          latencyMs: number;
+          usage: null;
+          timeInfo: null;
+        };
+      }>;
+    };
+  };
+
+  Object.defineProperty(planner, "client", {
+    value: {
+      config: { provider: "cerebras" },
+      requestStructured: async () => ({
+        data: {
+          plannerId: "llm_live",
+          strategy: "probe the nearby surface before collecting",
+          instruction: "Scan forward for the next reachable target",
+          actionName: "scan",
+          blockType: "",
+          item: "",
+          count: 1,
+          direction: "forward",
+          location: "",
+          reason: "The scene is ambiguous enough that a scan is the safest first action.",
+          successItem: "oak_log",
+          successCount: 1,
+          maximumSteps: 80,
+        },
+        meta: {
+          label: "planner",
+          provider: "cerebras",
+          model: "test-model",
+          status: "success",
+          latencyMs: 1,
+          usage: null,
+          timeInfo: null,
+        },
+      }),
+    },
+  });
+
+  const result = await planner.proposeCandidates(
+    {
+      timestamp: new Date().toISOString(),
+      userObjective: "gather wood",
+      position: { x: 0, y: 64, z: 0 },
+      biomeOrRegionHint: "forest_edge",
+      health: 20,
+      hunger: 20,
+      inventory: [],
+      equippedItem: "air",
+      timeOfDay: "day",
+      sceneSummary: null,
+      visibleHazards: [],
+      perceivedResources: ["oak_tree"],
+      nearbyBlocks: ["grass", "log"],
+      nearbyEntities: [],
+      lineOfSightTarget: "grass",
+      interactionHints: ["tree_visible"],
+      goalProgress: 0,
+    },
+    [],
+    {
+      sceneSummary: "A tree is somewhere ahead but the exact route is unclear.",
+      visibleResources: ["oak_tree"],
+      terrainAffordances: ["open_ground"],
+      hazards: [],
+      reachableTargets: ["grass"],
+      confidenceNotes: [],
+    },
+  );
+
+  const proposal = result.proposals[0];
+  assert.ok(proposal, "expected a proposal");
+  assert.equal(proposal.plannerId, "llm_live");
+  assert.equal(proposal.candidateAction.name, "scan");
+});
+
+test("PlannerService rejects repeated explore when a locate target is already visible", async () => {
+  const { PlannerService } = await import("../src/planner/planner_service.ts");
+
+  const planner = new PlannerService() as PlannerService & {
+    client: {
+      config: { provider: "cerebras" };
+      requestStructured: () => Promise<{
+        data: {
+          plannerId: string;
+          strategy: string;
+          instruction: string;
+          actionName: string;
+          blockType: string;
+          item: string;
+          count: number;
+          direction: string;
+          location: string;
+          reason: string;
+          successItem: string;
+          successCount: number;
+          maximumSteps: number;
+        };
+        meta: {
+          label: string;
+          provider: "cerebras";
+          model: string;
+          status: "success";
+          latencyMs: number;
+          usage: null;
+          timeInfo: null;
+        };
+      }>;
+    };
+  };
+
+  Object.defineProperty(planner, "client", {
+    value: {
+      config: { provider: "cerebras" },
+      requestStructured: async () => ({
+        data: {
+          plannerId: "llm_explore_loop",
+          strategy: "finalize the search phase",
+          instruction: "Explore toward the visible oak logs",
+          actionName: "explore",
+          blockType: "",
+          item: "",
+          count: 1,
+          direction: "forward",
+          location: "",
+          reason: "Move once more before collecting.",
+          successItem: "oak_log",
+          successCount: 1,
+          maximumSteps: 80,
+        },
+        meta: {
+          label: "planner",
+          provider: "cerebras",
+          model: "test-model",
+          status: "success",
+          latencyMs: 1,
+          usage: null,
+          timeInfo: null,
+        },
+      }),
+    },
+  });
+
+  const result = await planner.proposeCandidates(
+    {
+      timestamp: new Date().toISOString(),
+      userObjective: "mine for diamonds",
+      position: { x: 0, y: 64, z: 0 },
+      biomeOrRegionHint: "forest_edge",
+      health: 20,
+      hunger: 20,
+      inventory: [],
+      equippedItem: "air",
+      timeOfDay: "day",
+      sceneSummary: null,
+      visibleHazards: [],
+      perceivedResources: ["oak_tree"],
+      nearbyBlocks: ["grass", "log"],
+      nearbyEntities: [],
+      lineOfSightTarget: "log",
+      interactionHints: ["tree_visible"],
+      goalProgress: 0,
+    },
+    [],
+    {
+      sceneSummary: "Logs are visible nearby.",
+      visibleResources: ["oak_tree"],
+      terrainAffordances: ["open_ground"],
+      hazards: [],
+      reachableTargets: ["log"],
+      confidenceNotes: [],
+    },
+    [],
+    {
+      rootObjective: "mine for diamonds",
+      activeSubtask: {
+        id: "locate_logs",
+        description: "Find nearby trees on the surface",
+        planningFocus: "find nearby trees on the surface",
+        compound: false,
+        expectedAction: "explore",
+        targetItem: "oak_log",
+        targetCount: 1,
+        destination: "surface",
+      },
+      pendingSubtasks: [
+        {
+          id: "locate_logs",
+          description: "Find nearby trees on the surface",
+          planningFocus: "find nearby trees on the surface",
+          compound: false,
+          expectedAction: "explore",
+          targetItem: "oak_log",
+          targetCount: 1,
+          destination: "surface",
+        },
+        {
+          id: "collect_logs",
+          description: "Collect enough logs for tools and table",
+          planningFocus: "collect enough logs for tools and table",
+          compound: false,
+          expectedAction: "collect",
+          targetItem: "oak_log",
+          targetCount: 3,
+          destination: "surface",
+        },
+      ],
+      completedSubtasks: [],
+      taskTree: undefined,
+    },
+  );
+
+  const proposal = result.proposals[0];
+  assert.ok(proposal, "expected a fallback proposal");
+  assert.notEqual(proposal.plannerId, "llm_explore_loop");
+  assert.equal(proposal.candidateAction.name, "collect");
 });
 
 test("PlannerService prefers placing a carried crafting table before tool crafts", async () => {
