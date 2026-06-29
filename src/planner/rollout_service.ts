@@ -91,13 +91,14 @@ export class RolloutService {
       ),
     );
 
-    const liveFutures = liveCalls.flatMap((call, index) =>
-      call.data
-        ? call.data.futures.map((future) =>
-            this.fromStructured(proposals[index], future),
-          )
-        : [],
-    );
+    const liveFutures = liveCalls.flatMap((call, index) => {
+      const proposal = proposals[index];
+      if (!call.data || !proposal) {
+        return [];
+      }
+
+      return call.data.futures.map((future) => this.fromStructured(proposal, future));
+    });
 
     const heuristicFutures = this.heuristicRollout(worldState, proposals);
     const futures = padFutures(

@@ -41,7 +41,16 @@ interface PlannerProposalResponse {
 }
 
 function countItem(worldState: WorldState, item: string): number {
-  return worldState.inventory.find((stack) => stack.item === item)?.count ?? 0;
+  const aliases =
+    item === "oak_log"
+      ? ["oak_log", "log"]
+      : item === "oak_planks"
+        ? ["oak_planks", "planks"]
+        : [item];
+
+  return worldState.inventory
+    .filter((stack) => aliases.includes(stack.item))
+    .reduce((sum, stack) => sum + stack.count, 0);
 }
 
 function dedupeByAction(proposals: PlannerProposal[]): PlannerProposal[] {
@@ -59,6 +68,18 @@ function dedupeByAction(proposals: PlannerProposal[]): PlannerProposal[] {
   });
 }
 
+function hasRecentFailedScan(memorySummary: string[]): boolean {
+  return memorySummary.some((entry) =>
+    entry.includes("scan") && entry.includes("degraded"),
+  );
+}
+
+function hasRecentFailedPlace(memorySummary: string[]): boolean {
+  return memorySummary.some((entry) =>
+    entry.includes("place") && entry.includes("degraded"),
+  );
+}
+
 export class PlannerService {
   private readonly client = new CerebrasClient();
 
@@ -67,9 +88,25 @@ export class PlannerService {
     memorySummary: string[],
     perception: PerceptionResult,
   ): Promise<{ proposal: PlannerProposal; meta: ProviderCallMeta[] }> {
+    const proposed = await this.proposeCandidates(worldState, memorySummary, perception);
+    const fallback = this.heuristicPlan(worldState, memorySummary)[0];
+    if (!fallback) {
+      throw new Error("Planner heuristic fallback did not produce any proposals.");
+    }
+    return {
+      proposal: proposed.proposals[0] ?? fallback,
+      meta: proposed.meta,
+    };
+  }
+
+  async proposeCandidates(
+    worldState: WorldState,
+    memorySummary: string[],
+    perception: PerceptionResult,
+  ): Promise<{ proposals: PlannerProposal[]; meta: ProviderCallMeta[] }> {
     if (this.client.config.provider === "mock") {
       return {
-        proposal: this.heuristicPlan(worldState, memorySummary)[0],
+        proposals: this.heuristicPlan(worldState, memorySummary).slice(0, 1),
         meta: [
           {
             label: "planner",
@@ -84,6 +121,8 @@ export class PlannerService {
         ],
       };
     }
+
+    const heuristic = this.heuristicPlan(worldState, memorySummary);
     const result = await this.client.requestStructured<PlannerProposalResponse>({
       label: "planner",
       schemaName: "mine0_planner",
@@ -91,9 +130,7 @@ export class PlannerService {
       messages: [
         {
           role: "system",
-          content: plannerSystemPrompt(
-            "choose one best bounded next action with no alternative branches",
-          ),
+          content: plannerSystemPrompt("choose one bounded first action only"),
         },
         {
           role: "user",
@@ -103,12 +140,15 @@ export class PlannerService {
       maxOutputTokens: 900,
       temperature: 0.15,
     });
-
-    const heuristic = this.heuristicPlan(worldState, memorySummary);
-    const proposal = result.data ? this.fromStructured(result.data) : heuristic[0];
+    const liveProposal = result.data ? this.fromStructured(result.data) : null;
+    const liveProposals =
+      liveProposal && !this.shouldOverrideStructuredProposal(worldState, liveProposal, memorySummary)
+        ? [liveProposal]
+        : [];
+    const proposals = dedupeByAction([...liveProposals, ...heuristic]).slice(0, 1);
 
     return {
-      proposal,
+      proposals,
       meta: [result.meta],
     };
   }
@@ -119,8 +159,9 @@ export class PlannerService {
     const planks = countItem(worldState, "oak_planks");
     const craftingTables = countItem(worldState, "crafting_table");
     const proposals: PlannerProposal[] = [];
+    const wantsPlacement = objective.includes("place") || objective.includes("put down");
 
-    if (objective.includes("wood") || objective.includes("craft") || objective.includes("pickaxe")) {
+    if ((objective.includes("wood") || objective.includes("craft") || objective.includes("pickaxe")) && logs < 3) {
       proposals.push({
         plannerId: "planner_alpha",
         strategy: "gather wood immediately",
@@ -150,18 +191,35 @@ export class PlannerService {
       });
     }
 
-    proposals.push({
-      plannerId: "planner_gamma",
-      strategy: "improve visibility before committing",
-      instruction: "Scan the nearby terrain for oak and stone",
-      candidateAction: {
-        name: "scan",
-        arguments: { direction: "forward_left" },
-        reason: "A quick scan reduces risk when the visible scene is ambiguous.",
-      },
-      successCondition: { item: "oak_log", count: Math.max(1, 3 - logs) },
-      maximumSteps: 80,
-    });
+    if (!hasRecentFailedScan(memorySummary)) {
+      proposals.push({
+        plannerId: "planner_gamma",
+        strategy: "improve visibility before committing",
+        instruction: "Scan the nearby terrain for oak and stone",
+        candidateAction: {
+          name: "scan",
+          arguments: { direction: "forward_left" },
+          reason: "A quick scan reduces risk when the visible scene is ambiguous.",
+        },
+        successCondition: { item: "oak_log", count: Math.max(1, 3 - logs) },
+        maximumSteps: 80,
+      });
+    }
+
+    if (wantsPlacement && craftingTables >= 1 && !hasRecentFailedPlace(memorySummary)) {
+      proposals.push({
+        plannerId: "planner_place_table",
+        strategy: "place the crafted workstation into the world",
+        instruction: "Place the crafting table down in front of you",
+        candidateAction: {
+          name: "place",
+          arguments: { block_type: "crafting_table", location: "ahead" },
+          reason: "The objective explicitly requires placing the crafting table into the world.",
+        },
+        successCondition: { item: "crafting_table", count: 1 },
+        maximumSteps: 120,
+      });
+    }
 
     proposals.push({
       plannerId: "planner_delta",
@@ -177,6 +235,18 @@ export class PlannerService {
     });
 
     const deduped = dedupeByAction(proposals);
+
+    if (hasRecentFailedScan(memorySummary)) {
+      return deduped.sort((left, right) =>
+        left.candidateAction.name === "explore" ? -1 : right.candidateAction.name === "explore" ? 1 : 0,
+      );
+    }
+
+    if (hasRecentFailedPlace(memorySummary)) {
+      return deduped.sort((left, right) =>
+        left.candidateAction.name === "explore" ? -1 : right.candidateAction.name === "explore" ? 1 : 0,
+      );
+    }
 
     if (memorySummary.some((entry) => entry.includes("collect") && entry.includes("degraded"))) {
       return deduped.sort((left, right) =>
@@ -209,6 +279,29 @@ export class PlannerService {
       },
       maximumSteps: Math.max(40, Math.round(value.maximumSteps)),
     };
+  }
+
+  private shouldOverrideStructuredProposal(
+    worldState: WorldState,
+    proposal: PlannerProposal,
+    memorySummary: string[],
+  ): boolean {
+    if (proposal.candidateAction.name === "scan" && hasRecentFailedScan(memorySummary)) {
+      return true;
+    }
+
+    if (
+      (proposal.candidateAction.name === "scan" || proposal.candidateAction.name === "explore") &&
+      worldState.perceivedResources.includes("oak_tree")
+    ) {
+      return true;
+    }
+
+    if (proposal.candidateAction.name === "place" && hasRecentFailedPlace(memorySummary)) {
+      return true;
+    }
+
+    return false;
   }
 }
 

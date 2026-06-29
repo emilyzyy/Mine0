@@ -96,9 +96,11 @@ export class MemoryService {
 
     const summary = entries.map((entry) => {
       const verdict =
-        entry.actualOutcome.status === "success"
-          ? "worked"
-          : `degraded with ${entry.actualOutcome.status}`;
+        entry.predictionError >= 0.5
+          ? `degraded with prediction_error=${entry.predictionError.toFixed(2)}`
+          : entry.actualOutcome.status === "success"
+            ? "worked"
+            : `degraded with ${entry.actualOutcome.status}`;
       return `${entry.actionType} previously ${verdict} in ${entry.predictedFuture.strategy}`;
     });
 
