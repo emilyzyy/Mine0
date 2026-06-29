@@ -11,6 +11,7 @@ import { analyzeActions, validateMineStudioAgentAction, MINESTUDIO_CAMERA_MAX } 
 import { TaskStackService } from "../src/planner/task_stack_service.ts";
 import { taskDecompositionUserPrompt } from "../src/planner/planner_prompts.ts";
 import type { SubgoalIntent } from "../src/contracts/subgoal_intent.ts";
+import { parseSubgoalIntent } from "../src/contracts/subgoal_intent.ts";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -710,6 +711,29 @@ describe("overrideCombatSubtaskIntent — instruction fix", () => {
     assert.notEqual(result.successCondition.item, "oak_log",
       "successCondition.item must not be 'oak_log' for a zombie task");
     assert.equal(result.successCondition.item, "zombie_defeated");
+  });
+
+  it("toIntent→parseSubgoalIntent→overrideCombatSubtaskIntent pipeline for zombie scan does not throw and produces zombie_defeated", () => {
+    // Simulates exactly what decision_loop.ts does for a scan_for_zombie step:
+    // 1. toIntent() builds raw intent with "task_progress" fallback (no empty string)
+    // 2. parseSubgoalIntent() validates — must not throw
+    // 3. overrideCombatSubtaskIntent() overrides to "zombie_defeated"
+    const rawIntent = {
+      objective: "Kill zombies",
+      instruction: "Scan forward for resources and hazards",
+      candidateAction: { name: "scan", arguments: { direction: "forward" }, reason: "scan" },
+      successCondition: { item: "task_progress", count: 1 },
+      maximumSteps: 180,
+    };
+    // parseSubgoalIntent must not throw (would throw if item is "")
+    let parsed: SubgoalIntent;
+    assert.doesNotThrow(() => {
+      parsed = parseSubgoalIntent(rawIntent);
+    }, "parseSubgoalIntent must not throw when item is 'task_progress'");
+    const final = overrideCombatSubtaskIntent(parsed!, "scan_for_zombie", "Kill zombies");
+    assert.equal(final.successCondition.item, "zombie_defeated",
+      "After overrideCombatSubtaskIntent, successCondition.item must be 'zombie_defeated'");
+    assert.notEqual(final.successCondition.item, "oak_log");
   });
 });
 

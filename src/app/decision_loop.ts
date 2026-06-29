@@ -333,10 +333,11 @@ export class Mine0App {
       instruction: describeInstruction(future),
       candidateAction: future.candidateAction,
       successCondition: {
-        // Do not fall back to "oak_log" — use empty string so callers that override
-        // combat intent (overrideCombatSubtaskIntent) or non-resource actions can
-        // provide a meaningful value.
-        item: String(future.candidateAction.arguments.block_type ?? future.candidateAction.arguments.item ?? ""),
+        // Prefer the concrete block/item from the candidate action arguments.
+        // Fall back to "task_progress" (not "oak_log" and not "") so the schema
+        // never sees an empty string; overrideCombatSubtaskIntent sets the correct
+        // value for combat subtasks after parseSubgoalIntent runs.
+        item: String(future.candidateAction.arguments.block_type ?? future.candidateAction.arguments.item ?? "task_progress"),
         count: Number(future.candidateAction.arguments.count ?? 1),
       },
       maximumSteps: future.candidateAction.name === "collect" ? 400 : 180,
