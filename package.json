@@ -8,7 +8,8 @@
     "check": "node --experimental-strip-types --test tests/*.test.ts",
     "start": "node --experimental-strip-types src/server.ts",
     "demo": "node --experimental-strip-types src/cli.ts",
-    "eval": "node --experimental-strip-types src/evaluation/run_baseline.ts"
+    "eval": "node --experimental-strip-types src/evaluation/run_baseline.ts",
+    "jarvis": "node --experimental-strip-types src/cli_jarvis.ts"
   },
   "engines": {
     "node": ">=24.0.0"
