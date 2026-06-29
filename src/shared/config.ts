@@ -35,6 +35,8 @@ export interface JarvisConfig {
   videoFold: string;
   // Port of the persistent worker HTTP server on the remote host (loopback only).
   workerPort: number;
+  // When false, skip POST /reset at startup and reuse the existing Minecraft session.
+  resetOnStart: boolean;
 }
 
 export function loadJarvisConfig(): JarvisConfig {
@@ -52,6 +54,7 @@ export function loadJarvisConfig(): JarvisConfig {
     temperature: Math.max(0, Math.min(1, readNumber(process.env["JARVIS_TEMPERATURE"], 0.01))),
     videoFold: process.env["JARVIS_VIDEO_FOLD"]?.trim() ?? "logs/tiny",
     workerPort: readNumber(process.env["JARVIS_WORKER_PORT"], 8765),
+    resetOnStart: readBoolean(process.env["JARVIS_PERSISTENT_RESET_ON_START"], true),
   };
 }
 

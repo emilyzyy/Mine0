@@ -37,6 +37,7 @@ console.log(`  host          : ${config.user}@${config.host}:${config.port}`);
 console.log(`  worker port   : ${config.workerPort}`);
 console.log(`  env-config    : ${config.envConfig}`);
 console.log(`  max-frames/goal: ${config.maxFrames}`);
+console.log(`  reset on start: ${config.resetOnStart}`);
 console.log(`  max decisions : ${effectiveMaxSteps}  (set MINE0_MAX_DECISION_STEPS to change)`);
 console.log(`  objective     : ${objective}`);
 console.log("---");

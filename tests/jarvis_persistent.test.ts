@@ -192,3 +192,115 @@ describe("ActionOutcome status mapping from worker response", () => {
     assert.equal(mapStatus({ remoteExecutionSucceeded: true, taskSucceeded: null }), "partial_success");
   });
 });
+
+// ---------------------------------------------------------------------------
+// resetOnStart config flag parsing
+// ---------------------------------------------------------------------------
+
+// Mirrors the readBoolean() logic in config.ts (not exported).
+function readBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (!value) return fallback;
+  return value === "1" || value.toLowerCase() === "true";
+}
+
+describe("resetOnStart config parsing", () => {
+  it("defaults to true when env var is absent", () => {
+    assert.equal(readBoolean(undefined, true), true);
+  });
+
+  it("parses '0' as false (reset disabled)", () => {
+    assert.equal(readBoolean("0", true), false);
+  });
+
+  it("parses 'false' as false (reset disabled)", () => {
+    assert.equal(readBoolean("false", true), false);
+  });
+
+  it("parses '1' as true (reset enabled)", () => {
+    assert.equal(readBoolean("1", true), true);
+  });
+
+  it("parses 'true' as true (reset enabled)", () => {
+    assert.equal(readBoolean("true", true), true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// No-reset path: health response handling
+// ---------------------------------------------------------------------------
+
+interface WorkerHealth {
+  status?: string;
+  session_id?: string | null;
+  env_alive?: boolean;
+  cumulative_step?: number;
+}
+
+// Logic mirror of JarvisPersistentExecutor.reuseExistingSession() —
+// validates that the no-reset path reads health fields correctly.
+function applyHealthToState(health: WorkerHealth): {
+  sessionId: string | null;
+  cumulativeStep: number;
+} {
+  if (health.status !== "ok") throw new Error(`Worker not healthy: ${JSON.stringify(health)}`);
+  if (!health.env_alive) {
+    throw new Error(
+      "Worker is up but env_alive=false — no Minecraft session to reuse. " +
+      "Run with JARVIS_PERSISTENT_RESET_ON_START=1 (or unset) to start a new session.",
+    );
+  }
+  return {
+    sessionId:      health.session_id ?? null,
+    cumulativeStep: health.cumulative_step ?? 0,
+  };
+}
+
+describe("no-reset path (resetOnStart=false) — health response handling", () => {
+  it("extracts sessionId and cumulativeStep from a healthy response", () => {
+    const health: WorkerHealth = {
+      status: "ok",
+      session_id: "d39a87c0",
+      env_alive: true,
+      cumulative_step: 20,
+    };
+    const state = applyHealthToState(health);
+    assert.equal(state.sessionId, "d39a87c0");
+    assert.equal(state.cumulativeStep, 20);
+  });
+
+  it("defaults cumulativeStep to 0 when field is absent", () => {
+    const health: WorkerHealth = { status: "ok", session_id: "abc", env_alive: true };
+    const state = applyHealthToState(health);
+    assert.equal(state.cumulativeStep, 0);
+  });
+
+  it("defaults sessionId to null when field is absent", () => {
+    const health: WorkerHealth = { status: "ok", env_alive: true, cumulative_step: 5 };
+    const state = applyHealthToState(health);
+    assert.equal(state.sessionId, null);
+  });
+
+  it("throws when env_alive is false", () => {
+    const health: WorkerHealth = { status: "ok", session_id: "abc", env_alive: false };
+    assert.throws(
+      () => applyHealthToState(health),
+      /env_alive=false/,
+    );
+  });
+
+  it("error message for env_alive=false hints at JARVIS_PERSISTENT_RESET_ON_START=1", () => {
+    const health: WorkerHealth = { status: "ok", env_alive: false };
+    assert.throws(
+      () => applyHealthToState(health),
+      /JARVIS_PERSISTENT_RESET_ON_START=1/,
+    );
+  });
+
+  it("throws when worker status is not 'ok'", () => {
+    const health: WorkerHealth = { status: "error", session_id: null, env_alive: false };
+    assert.throws(
+      () => applyHealthToState(health),
+      /Worker not healthy/,
+    );
+  });
+});

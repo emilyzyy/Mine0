@@ -102,21 +102,27 @@ export class JarvisPersistentExecutor implements ExecutorBackend {
   }
 
   // ── reset() ───────────────────────────────────────────────────────────────
-  // On the FIRST call: POST /reset to the worker → starts Minecraft (slow).
-  // On subsequent calls (including the runCycle() finally block): no-op so
-  // Minecraft stays open between decisions.
-  async reset(userObjective: string): Promise<void> {
+  // On the FIRST call: either POST /reset (start/restart Minecraft) or GET
+  // /health (reuse existing session), depending on resetOnStart config.
+  // On subsequent calls (including the runCycle() finally block): always no-op
+  // so Minecraft stays open between decisions.
+  async reset(_userObjective: string): Promise<void> {
     if (this.hasInitialized) return;
     this.hasInitialized = true;
 
+    if (!this.config.resetOnStart) {
+      await this.reuseExistingSession();
+      return;
+    }
+
     console.log(`[jarvis-persistent] Calling /reset on worker (port ${this.config.workerPort}) …`);
     const body = {
-      envConfig:    this.config.envConfig,
-      baseUrl:      this.config.baseUrl,
-      checkpoints:  this.config.checkpoints,
-      temperature:  this.config.temperature,
-      actionChunkLen: 1,
-      historyNum:   0,
+      envConfig:       this.config.envConfig,
+      baseUrl:         this.config.baseUrl,
+      checkpoints:     this.config.checkpoints,
+      temperature:     this.config.temperature,
+      actionChunkLen:  1,
+      historyNum:      0,
       instructionType: "normal",
     };
     const result = await this.sshCurl("POST", "/reset", body) as {
@@ -126,6 +132,34 @@ export class JarvisPersistentExecutor implements ExecutorBackend {
 
     this.sessionId = result["sessionId"] ?? null;
     console.log(`[jarvis-persistent] Session started: ${this.sessionId} at ${result["startedAt"] ?? "?"}`);
+  }
+
+  // GET /health and mirror session state without touching Minecraft.
+  private async reuseExistingSession(): Promise<void> {
+    console.log("[jarvis-persistent] reset-on-start=false — probing worker for existing session…");
+    const health = await this.sshCurl("GET", "/health") as {
+      status?: string;
+      session_id?: string | null;
+      env_alive?: boolean;
+      cumulative_step?: number;
+    };
+
+    if (health["status"] !== "ok") {
+      throw new Error(`Worker not healthy: ${JSON.stringify(health)}`);
+    }
+    if (!health["env_alive"]) {
+      throw new Error(
+        "Worker is up but env_alive=false — no Minecraft session to reuse. " +
+        "Run with JARVIS_PERSISTENT_RESET_ON_START=1 (or unset) to start a new session.",
+      );
+    }
+
+    this.sessionId      = health["session_id"] ?? null;
+    this.cumulativeStep = health["cumulative_step"] ?? 0;
+    console.log(
+      `[jarvis-persistent] Reusing session: ${this.sessionId} ` +
+      `(cumulativeStep: ${this.cumulativeStep})`,
+    );
   }
 
   // ── execute() ─────────────────────────────────────────────────────────────
