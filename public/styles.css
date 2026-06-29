@@ -149,6 +149,9 @@ button:hover {
 .results.hidden {
   display: none;
 }
+.hidden {
+  display: none;
+}
 
 .panel-header {
   display: flex;
@@ -207,6 +210,183 @@ button:hover {
   font-size: 0.92rem;
 }
 
+.task-stack {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.step-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.live-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 18px;
+  align-items: start;
+}
+
+.task-tree-panel {
+  position: sticky;
+  top: 18px;
+  margin-top: 16px;
+  padding: 20px;
+  border: 1px solid rgba(44, 110, 73, 0.2);
+  border-radius: 20px;
+  background: linear-gradient(155deg, rgba(255, 247, 228, 0.96), rgba(238, 244, 229, 0.92));
+  box-shadow: 0 16px 40px rgba(48, 65, 36, 0.1);
+}
+
+.task-tree-heading {
+  margin-bottom: 18px;
+}
+
+.task-tree-heading .eyebrow {
+  margin-bottom: 5px;
+}
+
+.task-tree-root,
+.task-tree-root ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-tree-root ul {
+  margin-left: 14px;
+  padding-left: 18px;
+  border-left: 1px solid rgba(44, 110, 73, 0.24);
+}
+
+.task-node {
+  position: relative;
+  margin: 10px 0;
+}
+
+.task-node:not(.task-node-root)::before {
+  content: "";
+  position: absolute;
+  top: 18px;
+  left: -18px;
+  width: 14px;
+  border-top: 1px solid rgba(44, 110, 73, 0.24);
+}
+
+.task-node-card {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: start;
+  padding: 10px;
+  border-radius: 12px;
+}
+
+.task-node-active > .task-node-card {
+  background: rgba(188, 108, 37, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(188, 108, 37, 0.3);
+}
+
+.task-node-marker {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: var(--panel-strong);
+}
+
+.task-node-completed > .task-node-card .task-node-marker {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.task-node-active > .task-node-card .task-node-marker {
+  border-color: var(--accent-2);
+  background: var(--accent-2);
+  box-shadow: 0 0 0 4px rgba(188, 108, 37, 0.14);
+}
+
+.task-node-label {
+  font-size: 0.94rem;
+  line-height: 1.35;
+}
+
+.task-node-root > .task-node-card .task-node-label {
+  font-weight: 700;
+}
+
+.task-current-action {
+  margin-top: 5px;
+  color: var(--accent-2);
+  font-family: "SFMono-Regular", Menlo, Monaco, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.task-status {
+  color: var(--muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.task-node-active > .task-node-card .task-status {
+  color: var(--accent-2);
+}
+
+.task-node-completed > .task-node-card {
+  opacity: 0.64;
+}
+
+.task-tree-empty {
+  color: var(--muted);
+}
+
+.frame-panel {
+  margin-top: 16px;
+}
+
+.live-frame {
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(27, 27, 24, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.step-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.step-card p {
+  margin: 0;
+}
+
+.step-frame {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(27, 27, 24, 0.92);
+}
+
+.step-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
 .split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -230,6 +410,15 @@ pre {
 @media (max-width: 860px) {
   .split {
     grid-template-columns: 1fr;
+  }
+
+  .live-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .task-tree-panel {
+    position: static;
+    grid-row: 1;
   }
 
   .controls {

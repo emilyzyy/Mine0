@@ -1,5 +1,13 @@
 # Role Split Handoff
 
+## Current Guardrail
+
+Keep Mine0 in `single-decision mode` for now.
+
+- Planner work should produce one bounded proposal only.
+- Execution should take the first valid approach immediately.
+- Do not re-enable rollout branching or critic fan-out until API-usage limits are intentionally revisited.
+
 This scaffold is ready for the architecture split described in [PROJECT_PLAN.md](/Users/rhb/Desktop/Mine0/PROJECT_PLAN.md).
 
 ## Shared foundation
@@ -44,5 +52,6 @@ Expected next replacements:
 
 - Shared contract changes should be coordinated and reviewed first.
 - Keep executor-specific details out of planner modules.
+- Keep runtime backend selection explicit. Do not add automatic multi-route arbitration between Jarvis and Mineflayer inside the planner loop.
 - Keep provider-specific prompting details out of executor modules.
 - Add new fields to contracts only when they are needed by both roles or by the prompt-box/dashboard boundary.

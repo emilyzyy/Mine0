@@ -85,19 +85,20 @@ export class RolloutService {
               ),
             },
           ],
-          maxOutputTokens: 1200,
+          maxOutputTokens: 700,
           temperature: 0.25,
         }),
       ),
     );
 
-    const liveFutures = liveCalls.flatMap((call, index) =>
-      call.data
-        ? call.data.futures.map((future) =>
-            this.fromStructured(proposals[index], future),
-          )
-        : [],
-    );
+    const liveFutures = liveCalls.flatMap((call, index) => {
+      const proposal = proposals[index];
+      if (!call.data || !proposal) {
+        return [];
+      }
+
+      return call.data.futures.map((future) => this.fromStructured(proposal, future));
+    });
 
     const heuristicFutures = this.heuristicRollout(worldState, proposals);
     const futures = padFutures(
@@ -155,7 +156,7 @@ export class RolloutService {
           },
           {
             action: "verify resulting observation",
-            expectedResult: "New screenshot and state should reflect the predicted change.",
+            expectedResult: "New state should reflect the predicted change.",
           },
         ],
         successProbability,

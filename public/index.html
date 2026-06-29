@@ -39,6 +39,27 @@
 
       <section id="status" class="status idle">Ready.</section>
 
+      <section id="live-run" class="panel hidden">
+        <div class="panel-header">
+          <h2>Live Run</h2>
+          <span id="live-chip" class="chip">idle</span>
+        </div>
+        <div id="live-summary" class="intent-card"></div>
+        <div class="frame-panel">
+          <img id="live-frame" class="live-frame hidden" alt="Live first-person bot view" />
+        </div>
+        <div class="live-workspace">
+          <div id="live-steps" class="step-list"></div>
+          <aside class="task-tree-panel" aria-label="Live task tree">
+            <div class="task-tree-heading">
+              <p class="eyebrow">Objective map</p>
+              <h2>Task Tree</h2>
+            </div>
+            <div id="live-task-tree" class="task-tree-empty">Waiting for the task stack...</div>
+          </aside>
+        </div>
+      </section>
+
       <section id="results" class="results hidden">
         <article class="panel">
           <div class="panel-header">
@@ -46,6 +67,9 @@
             <span id="selected-executor" class="chip"></span>
           </div>
           <div id="selected-intent" class="intent-card"></div>
+          <div class="frame-panel">
+            <img id="selected-frame" class="live-frame hidden" alt="Selected step first-person view" />
+          </div>
         </article>
 
         <article class="panel">

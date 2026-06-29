@@ -4,3 +4,4 @@ artifacts/replays/*.json
 artifacts/frames/*.png
 .DS_Store
 .env
+node_modules/

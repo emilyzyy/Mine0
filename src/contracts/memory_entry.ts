@@ -15,6 +15,8 @@ export interface MemoryEntry {
   failureType: string | null;
   hazardContext: string[];
   resourceContext: string[];
+  issueTags: string[];
+  suggestedFixes: string[];
   predictionError: number;
   predictedFuture: PredictedFuture;
   actualOutcome: ActionOutcome;
@@ -42,6 +44,14 @@ export function parseMemoryEntry(value: unknown): MemoryEntry {
     resourceContext: assertStringArray(
       objectValue.resourceContext,
       "MemoryEntry.resourceContext",
+    ),
+    issueTags: assertStringArray(
+      objectValue.issueTags,
+      "MemoryEntry.issueTags",
+    ),
+    suggestedFixes: assertStringArray(
+      objectValue.suggestedFixes,
+      "MemoryEntry.suggestedFixes",
     ),
     predictionError: assertNumber(
       objectValue.predictionError,
