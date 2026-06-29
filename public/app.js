@@ -8,6 +8,7 @@ const branchTable = document.getElementById("branch-table");
 const worldState = document.getElementById("world-state");
 const outcome = document.getElementById("outcome");
 const runButton = document.getElementById("run-button");
+const endTaskButton = document.getElementById("end-task-button");
 const liveRun = document.getElementById("live-run");
 const liveChip = document.getElementById("live-chip");
 const liveSummary = document.getElementById("live-summary");
@@ -17,6 +18,11 @@ const liveFrame = document.getElementById("live-frame");
 const selectedFrame = document.getElementById("selected-frame");
 
 let livePollTimer = null;
+
+function setRunControls(running) {
+  runButton.disabled = running;
+  endTaskButton.disabled = !running;
+}
 
 function formatInventory(inventory) {
   if (!Array.isArray(inventory) || inventory.length === 0) {
@@ -72,14 +78,17 @@ function frameUrlFor(screenshotPath) {
 }
 
 function renderFrame(imageElement, screenshotPath) {
+  const framePanel = imageElement.parentElement;
   if (!screenshotPath) {
     imageElement.classList.add("hidden");
     imageElement.removeAttribute("src");
+    framePanel?.classList.add("hidden");
     return;
   }
 
   imageElement.src = frameUrlFor(screenshotPath);
   imageElement.classList.remove("hidden");
+  framePanel?.classList.remove("hidden");
 }
 
 function renderIntent(trace) {
@@ -170,6 +179,7 @@ function renderTrace(trace) {
 
 function renderLiveRun(runState) {
   liveRun.classList.remove("hidden");
+  setRunControls(Boolean(runState.running));
   liveChip.textContent = runState.running ? "running" : runState.error ? "error" : "complete";
   const latestScreenshotPath =
     runState.latestStep?.worldState?.screenshotPath ||
@@ -210,9 +220,7 @@ function renderLiveRun(runState) {
                 <strong>Step ${step.stepNumber}</strong>
                 <span>${step.selectedIntent.candidateAction.name}</span>
               </div>
-              <p><strong>Objective:</strong> ${step.selectedIntent.objective}</p>
               <p><strong>Active subtask:</strong> ${step.taskContext?.activeSubtask?.description || "none"}</p>
-              <p><strong>Pending stack:</strong> ${(step.taskContext?.pendingSubtasks || []).map((task) => task.description).join(" → ") || "none"}</p>
               <p><strong>Instruction:</strong> ${step.selectedIntent.instruction}</p>
               <p><strong>Strategy:</strong> ${step.plannedFuture.strategy}</p>
               <p><strong>Next step rationale:</strong> ${step.selectedIntent.candidateAction.reason}</p>
@@ -226,6 +234,8 @@ function renderLiveRun(runState) {
         )
         .join("")
     : `<article class="step-card"><p>Waiting for the first decision step...</p></article>`;
+
+  liveSteps.scrollTop = liveSteps.scrollHeight;
 }
 
 async function pollRunStatus() {
@@ -255,7 +265,7 @@ function startLivePolling() {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  runButton.disabled = true;
+  setRunControls(true);
   results.classList.add("hidden");
   setStatus("Running planning loop...", "running");
 
@@ -278,6 +288,14 @@ form.addEventListener("submit", async (event) => {
       throw new Error(body.error || "Request failed");
     }
 
+    if (body.cancelled) {
+      renderLiveRun({
+        ...await (await fetch("/api/run-status")).json(),
+      });
+      setStatus("Run cancelled.", "idle");
+      return;
+    }
+
     renderTrace(body.trace);
     renderLiveRun({
       running: false,
@@ -298,8 +316,32 @@ form.addEventListener("submit", async (event) => {
       "idle",
     );
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : "Unknown error", "error");
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (message === "Run cancelled by user.") {
+      setStatus("Run cancelled.", "idle");
+    } else {
+      setStatus(message, "error");
+    }
   } finally {
-    runButton.disabled = false;
+    setRunControls(false);
+  }
+});
+
+endTaskButton.addEventListener("click", async () => {
+  endTaskButton.disabled = true;
+  try {
+    const response = await fetch("/api/end-run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body.error || "Failed to end run");
+    }
+    setStatus("Ending current task...", "running");
+    startLivePolling();
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : "Failed to end run", "error");
+    setRunControls(true);
   }
 });

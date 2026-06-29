@@ -44,3 +44,28 @@ test("parseSubgoalIntent validates planner output", () => {
   assert.equal(intent.candidateAction.name, "collect");
   assert.equal(intent.successCondition.count, 3);
 });
+
+test("parseWorldState accepts a null screenshotPath", () => {
+  const worldState = parseWorldState({
+    timestamp: new Date().toISOString(),
+    userObjective: "Get cooked beef",
+    position: { x: 0, y: 64, z: 0 },
+    biomeOrRegionHint: "plains",
+    health: 20,
+    hunger: 20,
+    inventory: [],
+    equippedItem: "air",
+    timeOfDay: "day",
+    sceneSummary: null,
+    visibleHazards: [],
+    perceivedResources: [],
+    nearbyBlocks: [],
+    nearbyEntities: [],
+    lineOfSightTarget: null,
+    interactionHints: [],
+    goalProgress: 0.1,
+    screenshotPath: null,
+  });
+
+  assert.equal(worldState.screenshotPath, null);
+});

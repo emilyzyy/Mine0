@@ -855,7 +855,12 @@ function filterProposalsForActiveSubtask(
   }
 
   return proposals.filter((proposal) =>
-    actionAllowedForActiveSubtask(proposal.candidateAction.name, active, worldState),
+    actionAllowedForActiveSubtask(
+      proposal.candidateAction.name,
+      active,
+      worldState,
+      proposal.candidateAction.arguments,
+    ),
   );
 }
 
@@ -1497,7 +1502,12 @@ export class PlannerService {
   ): boolean {
     if (
       taskContext?.activeSubtask &&
-      !actionAllowedForActiveSubtask(proposal.candidateAction.name, taskContext.activeSubtask, worldState)
+      !actionAllowedForActiveSubtask(
+        proposal.candidateAction.name,
+        taskContext.activeSubtask,
+        worldState,
+        proposal.candidateAction.arguments,
+      )
     ) {
       return true;
     }

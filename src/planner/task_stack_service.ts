@@ -6,6 +6,7 @@ import {
   countInventoryItem,
   craftFailureNeedsWorkstation,
   extractCraftItemFromFocus,
+  parseMissingCraftIngredients,
   prependWorkstationPrerequisites,
 } from "./craft_prerequisites.ts";
 import {
@@ -380,6 +381,34 @@ function buildMissingPlacementPrerequisites(subtask: Subtask, worldState: WorldS
   }
 
   return [];
+}
+
+function buildCraftFailureRecoverySubtasks(
+  craftItem: string,
+  failureReason: string | null | undefined,
+  worldState: WorldState,
+  parentId: string,
+): Subtask[] {
+  const missingIngredients = parseMissingCraftIngredients(failureReason);
+  if (missingIngredients.length === 0) {
+    return [];
+  }
+
+  const recovery: Subtask[] = [];
+  for (const ingredient of missingIngredients) {
+    if (inventoryHasItem(worldState.inventory, ingredient.item, ingredient.count)) {
+      continue;
+    }
+    recovery.push(...expandObtainItemChain(ingredient.item, worldState, parentId));
+  }
+
+  if (recovery.length === 0) {
+    return [];
+  }
+
+  return assignPrerequisiteHierarchy(recovery, parentId).filter((task, index, list) =>
+    list.findIndex((candidate) => candidate.id === task.id && candidate.planningFocus === task.planningFocus) === index,
+  );
 }
 
 function makeCollectSubtask(id: string, description: string, focus: string): Subtask {
@@ -801,13 +830,55 @@ export class TaskStackService {
     const normalized = subtasks.map((subtask) => ({
       ...subtask,
       compound: false,
-      parentId: subtask.parentId ?? active?.parentId ?? "goal",
+      parentId: !subtask.parentId || subtask.parentId === "goal"
+        ? active?.id ?? "goal"
+        : subtask.parentId,
     })).filter((subtask) => !existingIds.has(subtask.id));
     if (normalized.length === 0) {
       return;
     }
     this.registerTasks(normalized);
     this.pending = [...normalized, ...this.pending];
+  }
+
+  replaceActiveSubtask(subtasks: Subtask[]): void {
+    const active = this.pending[0];
+    if (!active || subtasks.length === 0) {
+      return;
+    }
+
+    const remaining = this.pending.slice(1);
+    const existingIds = new Set(remaining.map((subtask) => subtask.id));
+    const normalized = subtasks.map((subtask) => ({
+      ...subtask,
+      compound: false,
+      parentId: !subtask.parentId || subtask.parentId === "goal"
+        ? active.id
+        : subtask.parentId,
+    })).filter((subtask) => subtask.id !== active.id && !existingIds.has(subtask.id));
+    if (normalized.length === 0) {
+      return;
+    }
+
+    this.registerTasks(normalized);
+    this.pending = [...normalized, ...remaining];
+  }
+
+  activeSubtaskNeedsExpansion(): boolean {
+    const active = this.pending[0];
+    if (!active) {
+      return false;
+    }
+
+    if (active.compound) {
+      return true;
+    }
+
+    if (!active.expectedAction) {
+      return true;
+    }
+
+    return false;
   }
 
   reconcile(worldState: WorldState): void {
@@ -899,6 +970,20 @@ export class TaskStackService {
       ) {
         const prereqs = buildWorkstationPrerequisiteSubtasks(worldState, craftItem);
         if (prereqs.length > 0) {
+          this.pending = [...prereqs, current, ...this.pending.slice(1)];
+          return;
+        }
+      }
+
+      if (intent.candidateAction.name === "craft" && craftItem) {
+        const prereqs = buildCraftFailureRecoverySubtasks(
+          craftItem,
+          outcome.failureReason,
+          worldState,
+          current.parentId ?? current.id,
+        );
+        if (prereqs.length > 0) {
+          this.registerTasks(prereqs);
           this.pending = [...prereqs, current, ...this.pending.slice(1)];
           return;
         }
@@ -1069,6 +1154,10 @@ export class TaskStackService {
   }
 
   private expandPendingHead(worldState: WorldState): void {
+    if (this.llmPlanned) {
+      return;
+    }
+
     while (this.pending[0]?.compound) {
       const head = this.pending[0];
       if (!head) {

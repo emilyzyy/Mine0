@@ -3,6 +3,25 @@ import { countInventoryItem } from "./craft_prerequisites.ts";
 import { isTargetVisibleForItem } from "./goal_prerequisites.ts";
 import type { Subtask } from "./task_stack_service.ts";
 
+function actionMatchesTarget(actual: string, target: string | null): boolean {
+  if (!target || !actual) {
+    return true;
+  }
+
+  const aliases =
+    target === "oak_log"
+      ? ["oak_log", "log"]
+      : target === "oak_planks" || target === "planks"
+        ? ["oak_planks", "planks"]
+        : target === "wooden_door"
+          ? ["wooden_door", "door"]
+          : target === "cobblestone"
+            ? ["cobblestone", "stone"]
+            : [target];
+
+  return aliases.includes(actual);
+}
+
 export function subtaskTargetCount(subtask: Subtask): number {
   const count = subtask.targetCount;
   if (typeof count === "number" && Number.isFinite(count) && count > 0) {
@@ -52,10 +71,17 @@ export function actionAllowedForActiveSubtask(
   actionName: string,
   subtask: Subtask | null,
   worldState: WorldState,
+  actionArguments: Record<string, string | number> = {},
 ): boolean {
   if (!subtask?.expectedAction) {
     return true;
   }
+
+  const targetItem = subtask.targetItem?.toLowerCase() ?? null;
+  const craftItem = String(actionArguments.item ?? "").toLowerCase();
+  const collectItem = String(actionArguments.block_type ?? "").toLowerCase();
+  const placeItem = String(actionArguments.block_type ?? "").toLowerCase();
+  const smeltOutput = String(actionArguments.item ?? "").toLowerCase();
 
   switch (subtask.expectedAction) {
     case "explore":
@@ -72,14 +98,26 @@ export function actionAllowedForActiveSubtask(
       }
       return false;
     case "collect":
-      return actionName === "collect";
+      if (actionName !== "collect") {
+        return false;
+      }
+      return actionMatchesTarget(collectItem, targetItem);
     case "craft":
-      return actionName === "craft";
+      if (actionName !== "craft") {
+        return false;
+      }
+      return actionMatchesTarget(craftItem, targetItem);
     case "smelt":
-      return actionName === "smelt";
+      if (actionName !== "smelt") {
+        return false;
+      }
+      return actionMatchesTarget(smeltOutput, targetItem);
     case "place":
     case "use":
-      return actionName === "place" || actionName === "use";
+      if (actionName !== "place" && actionName !== "use") {
+        return false;
+      }
+      return actionMatchesTarget(placeItem, targetItem);
     case "equip":
       return actionName === "equip";
     default:

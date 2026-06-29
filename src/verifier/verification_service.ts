@@ -101,6 +101,15 @@ export class VerificationService {
       suggestedFixes.add("scan or move to a new search frontier before retrying collection.");
     }
 
+    if (
+      actionName === "collect" &&
+      actualOutcome.status === "failed" &&
+      actualOutcome.inventoryDelta.every((entry) => entry.countChange <= 0)
+    ) {
+      issueTags.add("collect_without_inventory_gain");
+      suggestedFixes.add("do not retry the same collect unchanged; reassess whether the target is harvestable with the current tool, actually reachable, or the wrong block.");
+    }
+
     if ((actionName === "scan" || actionName === "explore") && movementMagnitude <= 0.5 && actualOutcome.inventoryDelta.length === 0) {
       issueTags.add("stagnant_search");
       suggestedFixes.add("change search direction, search depth, or frontier instead of repeating the same scan or explore.");

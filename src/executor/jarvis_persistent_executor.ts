@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { ActionOutcome, SubgoalIntent, WorldState } from "../contracts/index.ts";
 import { parseActionOutcome, parseWorldState } from "../contracts/index.ts";
 import { loadJarvisConfig, type JarvisConfig } from "../shared/config.ts";
-import { writeJsonArtifact } from "../shared/fs.ts";
+import { projectPath, writeJsonArtifact } from "../shared/fs.ts";
 import { appendJsonLine, isoNow } from "../shared/logger.ts";
 import type { ExecutorBackend, ExecutorObservation } from "./executor_interface.ts";
 import { analyzeActions, type ActionLoopAnalysis } from "./jarvis_action_analyzer.ts";
@@ -62,11 +64,16 @@ export class JarvisPersistentExecutor implements ExecutorBackend {
   private cumulativeStep = 0;
   // Active session ID (for display/logging).
   private sessionId: string | null = null;
+  private latestScreenshotPath: string | null = null;
 
   constructor() {
     this.config = loadJarvisConfig();
     this.displayName =
       `JARVIS-VLA persistent (${this.config.user}@${this.config.host}:${this.config.port}, worker :${this.config.workerPort})`;
+  }
+
+  async beginObjective(userObjective: string): Promise<void> {
+    await this.reset(userObjective);
   }
 
   // ── observe() ─────────────────────────────────────────────────────────────
@@ -95,6 +102,7 @@ export class JarvisPersistentExecutor implements ExecutorBackend {
         lineOfSightTarget: null,
         interactionHints: [],
         goalProgress:     Math.min(this.cumulativeStep / 50, 0.99),
+        screenshotPath:   this.latestScreenshotPath,
       }),
     };
   }
@@ -184,6 +192,9 @@ export class JarvisPersistentExecutor implements ExecutorBackend {
     this.sessionId      = raw.sessionId      ?? this.sessionId;
     this.cumulativeStep = raw.cumulativeStepAfter ?? this.cumulativeStep;
 
+    const localizedScreenshotPath = await this.localizeRemoteScreenshot(raw.latestScreenshotPath);
+    this.latestScreenshotPath = localizedScreenshotPath;
+
     const loopAnalysis = analyzeActions(raw.actions ?? []);
 
     let status: "success" | "partial_success" | "failed";
@@ -222,7 +233,7 @@ export class JarvisPersistentExecutor implements ExecutorBackend {
       durationSeconds,
       remoteExecutionSucceeded: raw.remoteExecutionSucceeded,
       taskSucceeded:        raw.taskSucceeded,
-      latestScreenshotPath: raw.latestScreenshotPath,
+      latestScreenshotPath: localizedScreenshotPath,
       videoPath:            raw.videoPath,
       loopAnalysis,
     };
@@ -274,6 +285,43 @@ export class JarvisPersistentExecutor implements ExecutorBackend {
       );
     }
     return JSON.parse(stdout);
+  }
+
+  private async localizeRemoteScreenshot(remotePath: string | null): Promise<string | null> {
+    if (!remotePath) {
+      return null;
+    }
+
+    try {
+      const encoded = await this.sshReadBase64(remotePath);
+      if (!encoded) {
+        return null;
+      }
+
+      const extension = path.extname(remotePath).toLowerCase() || ".png";
+      const localDirectory = projectPath("artifacts", "frames", "jarvis-persistent");
+      await mkdir(localDirectory, { recursive: true });
+      const localPath = path.join(
+        localDirectory,
+        `frame_${String(this.cumulativeStep).padStart(4, "0")}${extension}`,
+      );
+      await writeFile(localPath, Buffer.from(encoded, "base64"));
+      return localPath;
+    } catch {
+      return null;
+    }
+  }
+
+  private async sshReadBase64(remotePath: string): Promise<string> {
+    const quotedPath = remotePath.replace(/'/g, `'\"'\"'`);
+    const remoteCommand = `base64 -w 0 '${quotedPath}'`;
+    const { exitCode, stdout, stderr } = await this.runSsh(remoteCommand);
+    if (exitCode !== 0 || !stdout.trim()) {
+      throw new Error(
+        `Worker base64 screenshot read failed (exit ${exitCode}): ${stderr.slice(-300) || "(no stderr)"}`,
+      );
+    }
+    return stdout.trim();
   }
 
   private runSsh(

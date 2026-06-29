@@ -205,6 +205,35 @@ export function craftFailureNeedsWorkstation(
   );
 }
 
+export interface MissingCraftIngredient {
+  item: string;
+  count: number;
+}
+
+export function parseMissingCraftIngredients(
+  failureReason: string | null | undefined,
+): MissingCraftIngredient[] {
+  const reason = failureReason ?? "";
+  const match = reason.match(/Missing ingredients:\s*(.+?)(?:[.!]|$)/i);
+  if (!match?.[1]) {
+    return [];
+  }
+
+  return match[1]
+    .split(/\s*,\s*/)
+    .map((entry) => {
+      const parsed = entry.match(/^([a-z0-9_]+)\s*x(\d+)$/i);
+      if (!parsed) {
+        return null;
+      }
+      return {
+        item: parsed[1].toLowerCase(),
+        count: Number(parsed[2]),
+      };
+    })
+    .filter((entry): entry is MissingCraftIngredient => Boolean(entry) && entry.count > 0);
+}
+
 function dedupeSubtasks(subtasks: Subtask[]): Subtask[] {
   const seen = new Set<string>();
   return subtasks.filter((subtask) => {

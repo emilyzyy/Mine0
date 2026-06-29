@@ -284,6 +284,82 @@ test("TaskStackService expands iron pickaxe progression through furnace and smel
   assert.ok(craftNode.children.some((node) => node.id === "smelt_iron_ingots"));
 });
 
+test("TaskStackService injects missing ingredient subtasks after a craft failure", () => {
+  const stack = new TaskStackService();
+  stack.reset("mine diamonds", {
+    timestamp: new Date().toISOString(),
+    userObjective: "mine diamonds",
+    position: { x: 0, y: 64, z: 0 },
+    biomeOrRegionHint: "forest_edge",
+    health: 20,
+    hunger: 20,
+    inventory: [
+      { item: "crafting_table", count: 1 },
+      { item: "stick", count: 14 },
+      { item: "wooden_pickaxe", count: 1 },
+    ],
+    equippedItem: "wooden_pickaxe",
+    timeOfDay: "day",
+    sceneSummary: null,
+    visibleHazards: [],
+    perceivedResources: [],
+    nearbyBlocks: ["grass", "dirt"],
+    nearbyEntities: [],
+    lineOfSightTarget: "grass",
+    interactionHints: ["crafting_table_nearby"],
+    goalProgress: 0.4,
+  });
+  const blockedSubtaskId = stack.getContext().activeSubtask?.id;
+
+  stack.onStepComplete(
+    {
+      objective: "mine diamonds",
+      instruction: "Craft 1 furnace",
+      candidateAction: {
+        name: "craft",
+        arguments: { item: "furnace", count: 1 },
+        reason: "Need a furnace for downstream smelting",
+      },
+      successCondition: { item: "furnace", count: 1 },
+      maximumSteps: 180,
+    },
+    {
+      status: "failed",
+      positionDelta: { x: 0, y: 0, z: 0 },
+      inventoryDelta: [],
+      failureReason: "Craft prerequisites missing for furnace. Missing ingredients: cobblestone x8.",
+    },
+    {
+      timestamp: new Date().toISOString(),
+      userObjective: "mine diamonds",
+      position: { x: 0, y: 64, z: 0 },
+      biomeOrRegionHint: "forest_edge",
+      health: 20,
+      hunger: 20,
+      inventory: [
+        { item: "crafting_table", count: 1 },
+        { item: "stick", count: 14 },
+        { item: "wooden_pickaxe", count: 1 },
+      ],
+      equippedItem: "wooden_pickaxe",
+      timeOfDay: "day",
+      sceneSummary: null,
+      visibleHazards: [],
+      perceivedResources: [],
+      nearbyBlocks: ["grass", "dirt"],
+      nearbyEntities: [],
+      lineOfSightTarget: "grass",
+      interactionHints: ["crafting_table_nearby"],
+      goalProgress: 0.4,
+    },
+  );
+
+  const pendingIds = stack.getContext().pendingSubtasks.map((task) => task.id);
+  assert.equal(stack.getContext().activeSubtask?.id, "locate_cobblestone");
+  assert.ok(pendingIds.includes("obtain_cobblestone"));
+  assert.ok(blockedSubtaskId ? pendingIds.includes(blockedSubtaskId) : false);
+});
+
 test("TaskStackService drops stale upstream work when a later craft becomes achievable", () => {
   const stack = new TaskStackService();
   const baseState = {

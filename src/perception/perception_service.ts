@@ -41,8 +41,14 @@ export class PerceptionService {
       };
     }
 
+    const screenshotPath =
+      executorKind === "jarvis" || executorKind === "jarvis-persistent"
+        ? worldState.screenshotPath ?? null
+        : null;
+
     const content = await this.client.buildUserContent(
       perceptionUserPrompt(worldState, executorKind),
+      screenshotPath,
     );
 
     const response = await this.client.requestStructured<PerceptionResult>({

@@ -12,7 +12,7 @@ import { PerceptionService } from "../perception/perception_service.ts";
 import { loadPlannerConfig } from "../shared/config.ts";
 import { PlannerService, proposalToPredictedFuture } from "../planner/planner_service.ts";
 import { TaskDecompositionService } from "../planner/task_decomposition_service.ts";
-import { TaskStackService } from "../planner/task_stack_service.ts";
+import { TaskStackService, type TaskPlanningContext } from "../planner/task_stack_service.ts";
 import { makeId } from "../shared/ids.ts";
 import { appendJsonLine, isoNow } from "../shared/logger.ts";
 import { VerificationService } from "../verifier/verification_service.ts";
@@ -25,6 +25,7 @@ export interface RunCycleInput {
   objective: string;
   executorKind: ExecutorKind;
   mode: PlanningMode;
+  signal?: AbortSignal;
   // Bypasses the floor in loadPlannerConfig() — intended for JARVIS persistent
   // demos where each step costs ~60-90 s of real Minecraft time.
   maxDecisionSteps?: number;
@@ -44,106 +45,139 @@ export class Mine0App {
   private readonly config = loadPlannerConfig();
 
   async runCycle(input: RunCycleInput, hooks: RunCycleHooks = {}): Promise<DecisionTrace> {
-    const executor = createExecutor(input.executorKind);
-    try {
-      await executor.reset(input.objective);
-      const traceId = makeId("trace");
-      const startedAt = isoNow();
-      const steps: DecisionStepTrace[] = [];
-      let stopReason = "running";
-      let completedObjective = false;
-      let placedCraftingTable = false;
-      let placedDoor = false;
-      let placedDoorCount = 0;
-      let repeatedFailureCount = 0;
-      let previousFailureSignature: string | null = null;
-      let stalledStepCount = 0;
-      let latestObservation = await executor.observe(input.objective);
-      let latestWorldState = parseWorldState(latestObservation.worldState);
+    const abortIfRequested = () => {
+      if (input.signal?.aborted) {
+        throw new Error("Run cancelled by user.");
+      }
+    };
 
-      const decomposition = await this.taskDecomposition.decomposeObjective(
+    const executor = createExecutor(input.executorKind);
+    await executor.beginObjective?.(input.objective);
+    if (!executor.beginObjective) {
+      await executor.reset(input.objective);
+    }
+    const traceId = makeId("trace");
+    const startedAt = isoNow();
+    const steps: DecisionStepTrace[] = [];
+    let stopReason = "running";
+    let completedObjective = false;
+    let placedCraftingTable = false;
+    let placedDoor = false;
+    let placedDoorCount = 0;
+    let repeatedFailureCount = 0;
+    let previousFailureSignature: string | null = null;
+    let stalledStepCount = 0;
+    const breakdownMemo = new Set<string>();
+    let latestObservation = await executor.observe(input.objective);
+    let latestWorldState = parseWorldState(latestObservation.worldState);
+
+    const decomposition = await this.taskDecomposition.decomposeObjective(
+      input.objective,
+      latestWorldState,
+      [],
+      input.executorKind,
+    );
+    this.taskStack.reset(input.objective, latestWorldState, {
+      llmSubtasks: decomposition.subtasks?.length ? decomposition.subtasks : undefined,
+    });
+    await this.expandActiveSubtaskIfNeeded(
+      input.objective,
+      input.executorKind,
+      latestWorldState,
+      [],
+      [],
+      breakdownMemo,
+    );
+
+    if (this.isObjectiveComplete(input.objective, latestWorldState.inventory, placedCraftingTable, placedDoor, placedDoorCount)) {
+      completedObjective = true;
+      stopReason = "objective_already_satisfied";
+    }
+
+    const effectiveMaxSteps = input.maxDecisionSteps ?? this.config.maxDecisionSteps;
+
+    for (let stepNumber = 1; stepNumber <= effectiveMaxSteps && !completedObjective; stepNumber += 1) {
+      if (input.signal?.aborted) {
+        stopReason = "user_cancelled";
+        break;
+      }
+      const recentHistorySummary = buildRecentHistorySummary(steps);
+      const perceptionStep = await this.perception.perceive(latestWorldState, input.executorKind);
+      abortIfRequested();
+      const worldState = parseWorldState({
+        ...latestWorldState,
+        sceneSummary: perceptionStep.result.sceneSummary,
+      });
+      this.taskStack.reconcile(worldState);
+      const memoryResult = await this.memory.retrieve(worldState, recentHistorySummary);
+      await this.expandActiveSubtaskIfNeeded(
         input.objective,
-        latestWorldState,
-        [],
+        input.executorKind,
+        worldState,
+        memoryResult.summary,
+        recentHistorySummary,
+        breakdownMemo,
+      );
+      this.taskStack.reconcile(worldState);
+      const taskContext = this.taskStack.getContext();
+      const proposalStep = await this.planner.proposeCandidates(
+        worldState,
+        memoryResult.summary,
+        perceptionStep.result,
+        recentHistorySummary,
+        taskContext,
         input.executorKind,
       );
-      this.taskStack.reset(input.objective, latestWorldState, {
-        llmSubtasks: decomposition.subtasks?.length ? decomposition.subtasks : undefined,
-      });
-
-      if (this.isObjectiveComplete(input.objective, latestWorldState.inventory, placedCraftingTable, placedDoor, placedDoorCount)) {
-        completedObjective = true;
-        stopReason = "objective_already_satisfied";
-      }
-
-      const effectiveMaxSteps = input.maxDecisionSteps ?? this.config.maxDecisionSteps;
-
-      for (let stepNumber = 1; stepNumber <= effectiveMaxSteps && !completedObjective; stepNumber += 1) {
-        const recentHistorySummary = buildRecentHistorySummary(steps);
-        const perceptionStep = await this.perception.perceive(latestWorldState, input.executorKind);
-        const worldState = parseWorldState({
-          ...latestWorldState,
-          sceneSummary: perceptionStep.result.sceneSummary,
-        });
-        this.taskStack.reconcile(worldState);
-        const memoryResult = await this.memory.retrieve(worldState, recentHistorySummary);
-        const taskContext = this.taskStack.getContext();
-        const proposalStep = await this.planner.proposeCandidates(
-          worldState,
-          memoryResult.summary,
-          perceptionStep.result,
-          recentHistorySummary,
-          taskContext,
-          input.executorKind,
-        );
-        const selectedPlan = this.selectPlan(worldState, proposalStep.proposals);
-        const plannedFuture = selectedPlan.future;
-        let selectedIntent = parseSubgoalIntent(this.toIntent(input.objective, plannedFuture));
-        // For jarvis-persistent combat subtasks, replace abstract LLM instruction
-        // and oak_log successCondition with subtask-specific values.
-        if (input.executorKind === "jarvis-persistent") {
-          selectedIntent = overrideCombatSubtaskIntent(
-            selectedIntent,
-            taskContext.activeSubtask?.id ?? null,
-            input.objective,
-          );
-        }
-        const actionOutcome = await executor.execute(selectedIntent, worldState);
-        const verification = this.verifier.verify(plannedFuture, actionOutcome);
-        const storedMemory = await this.memory.remember(
-          worldState,
-          plannedFuture,
-          actionOutcome,
-          verification,
-        );
-
-        steps.push({
-          stepNumber,
-          taskContext,
-          worldState,
-          perception: perceptionStep.result,
-          memorySummary: memoryResult.summary,
-          plannedFuture,
+      abortIfRequested();
+      const selectedPlan = this.selectPlan(worldState, proposalStep.proposals);
+      const plannedFuture = selectedPlan.future;
+      let selectedIntent = parseSubgoalIntent(this.toIntent(input.objective, plannedFuture));
+      // For jarvis-persistent combat subtasks, replace abstract LLM instruction
+      // and oak_log successCondition with subtask-specific values.
+      if (input.executorKind === "jarvis-persistent") {
+        selectedIntent = overrideCombatSubtaskIntent(
           selectedIntent,
-          actionOutcome,
-          verification,
-          storedMemory,
-          planner: {
-            callLog: [
-              perceptionStep.meta,
-              ...proposalStep.meta,
-            ],
-            proposals: proposalStep.proposals.map((proposal) => ({
-              plannerId: proposal.plannerId,
-              strategy: proposal.strategy,
-              instruction: proposal.instruction,
-              candidateAction: proposal.candidateAction,
-            })),
-            scoredBranches: selectedPlan.scoredBranches,
-            selectedBranchId: selectedPlan.future.branchId,
-          },
-        });
-        await hooks.onStep?.(steps[steps.length - 1] as DecisionStepTrace);
+          taskContext.activeSubtask?.id ?? null,
+          input.objective,
+        );
+      }
+      const actionOutcome = await executor.execute(selectedIntent, worldState);
+      abortIfRequested();
+      const verification = this.verifier.verify(plannedFuture, actionOutcome);
+      const storedMemory = await this.memory.remember(
+        worldState,
+        plannedFuture,
+        actionOutcome,
+        verification,
+      );
+
+      steps.push({
+        stepNumber,
+        taskContext,
+        worldState,
+        perception: perceptionStep.result,
+        memorySummary: memoryResult.summary,
+        plannedFuture,
+        selectedIntent,
+        actionOutcome,
+        verification,
+        storedMemory,
+        planner: {
+          callLog: [
+            perceptionStep.meta,
+            ...proposalStep.meta,
+          ],
+          proposals: proposalStep.proposals.map((proposal) => ({
+            plannerId: proposal.plannerId,
+            strategy: proposal.strategy,
+            instruction: proposal.instruction,
+            candidateAction: proposal.candidateAction,
+          })),
+          scoredBranches: selectedPlan.scoredBranches,
+          selectedBranchId: selectedPlan.future.branchId,
+        },
+      });
+      await hooks.onStep?.(steps[steps.length - 1] as DecisionStepTrace);
 
         if (
           actionOutcome.status === "success" &&
@@ -164,22 +198,33 @@ export class Mine0App {
 
         latestObservation = await executor.observe(input.objective);
         latestWorldState = parseWorldState(latestObservation.worldState);
+        abortIfRequested();
 
         let llmRefined = false;
-        if (actionOutcome.status === "failed" && this.taskStack.isLlmPlanned()) {
+        if (actionOutcome.status === "failed") {
           const taskContext = this.taskStack.getContext();
-          const refinement = await this.taskDecomposition.refineOnFailure(
-            input.objective,
+          const refinementMemoKey = makeBreakdownMemoKey(
+            "failure",
             taskContext,
-            actionOutcome.failureReason ?? "unknown failure",
             latestWorldState,
-            selectedIntent,
-            input.executorKind,
+            actionOutcome.failureReason ?? "unknown failure",
           );
-          if (refinement.subtasks.length > 0) {
-            this.taskStack.prependSubtasks(refinement.subtasks);
-            this.taskStack.reconcile(latestWorldState);
-            llmRefined = true;
+          if (!breakdownMemo.has(refinementMemoKey)) {
+            const refinement = await this.taskDecomposition.refineOnFailure(
+              input.objective,
+              taskContext,
+              actionOutcome.failureReason ?? "unknown failure",
+              latestWorldState,
+              selectedIntent,
+              input.executorKind,
+              recentHistorySummary,
+            );
+            if (refinement.subtasks.length > 0) {
+              breakdownMemo.add(refinementMemoKey);
+              this.taskStack.prependSubtasks(refinement.subtasks);
+              this.taskStack.reconcile(latestWorldState);
+              llmRefined = true;
+            }
           }
         }
 
@@ -227,45 +272,85 @@ export class Mine0App {
         } else if (stepNumber === effectiveMaxSteps) {
           stopReason = `safety_step_limit_reached=${effectiveMaxSteps}`;
         }
+    }
+
+    const finalStep = steps.at(-1);
+    if (!finalStep) {
+      throw new Error(stopReason === "user_cancelled" ? "Run cancelled by user." : "No decision steps were executed.");
+    }
+
+    const trace: DecisionTrace = {
+      traceId,
+      objective: input.objective,
+      executor: executor.displayName,
+      mode: input.mode,
+      startedAt,
+      completedObjective,
+      stopReason,
+      totalDecisions: steps.length,
+      steps,
+      worldState: finalStep.worldState,
+      perception: finalStep.perception,
+      memorySummary: finalStep.memorySummary,
+      plannedFuture: finalStep.plannedFuture,
+      selectedIntent: finalStep.selectedIntent,
+      actionOutcome: finalStep.actionOutcome,
+      verification: finalStep.verification,
+      storedMemory: finalStep.storedMemory,
+      planner: {
+        providerMode: this.config.provider,
+        configuredModel: this.config.model,
+        callLog: finalStep.planner.callLog,
+        proposals: finalStep.planner.proposals,
+        scoredBranches: finalStep.planner.scoredBranches,
+        selectedBranchId: finalStep.planner.selectedBranchId,
+      },
+    };
+
+    await executor.announceObjectiveResult?.({
+      objective: input.objective,
+      completed: completedObjective,
+      stopReason,
+      failureReason: summarizeRunFailure(trace),
+    });
+    await appendJsonLine("runs.jsonl", trace);
+    return trace;
+  }
+
+  private async expandActiveSubtaskIfNeeded(
+    objective: string,
+    executorKind: ExecutorKind,
+    worldState: ReturnType<typeof parseWorldState>,
+    memorySummary: string[],
+    recentHistorySummary: string[],
+    breakdownMemo: Set<string>,
+  ): Promise<void> {
+    for (let depth = 0; depth < 3; depth += 1) {
+      if (!this.taskStack.activeSubtaskNeedsExpansion()) {
+        return;
       }
 
-      const finalStep = steps.at(-1);
-      if (!finalStep) {
-        throw new Error("No decision steps were executed.");
+      const taskContext = this.taskStack.getContext();
+      const memoKey = makeBreakdownMemoKey("decompose", taskContext, worldState);
+      if (breakdownMemo.has(memoKey)) {
+        return;
       }
 
-      const trace: DecisionTrace = {
-        traceId,
-        objective: input.objective,
-        executor: executor.displayName,
-        mode: input.mode,
-        startedAt,
-        completedObjective,
-        stopReason,
-        totalDecisions: steps.length,
-        steps,
-        worldState: finalStep.worldState,
-        perception: finalStep.perception,
-        memorySummary: finalStep.memorySummary,
-        plannedFuture: finalStep.plannedFuture,
-        selectedIntent: finalStep.selectedIntent,
-        actionOutcome: finalStep.actionOutcome,
-        verification: finalStep.verification,
-        storedMemory: finalStep.storedMemory,
-        planner: {
-          providerMode: this.config.provider,
-          configuredModel: this.config.model,
-          callLog: finalStep.planner.callLog,
-          proposals: finalStep.planner.proposals,
-          scoredBranches: finalStep.planner.scoredBranches,
-          selectedBranchId: finalStep.planner.selectedBranchId,
-        },
-      };
+      const decomposition = await this.taskDecomposition.decomposeActiveSubtask(
+        objective,
+        taskContext,
+        worldState,
+        memorySummary,
+        recentHistorySummary,
+        executorKind,
+      );
+      breakdownMemo.add(memoKey);
+      if (decomposition.subtasks.length === 0) {
+        return;
+      }
 
-      await appendJsonLine("runs.jsonl", trace);
-      return trace;
-    } finally {
-      await executor.reset(input.objective);
+      this.taskStack.replaceActiveSubtask(decomposition.subtasks);
+      this.taskStack.reconcile(worldState);
     }
   }
 
@@ -406,6 +491,40 @@ export class Mine0App {
       ],
     };
   }
+}
+
+function makeBreakdownMemoKey(
+  kind: "decompose" | "failure",
+  taskContext: TaskPlanningContext,
+  worldState: ReturnType<typeof parseWorldState>,
+  failureReason = "",
+): string {
+  const active = taskContext.activeSubtask;
+  return JSON.stringify({
+    kind,
+    activeId: active?.id ?? "none",
+    focus: active?.planningFocus ?? "",
+    expectedAction: active?.expectedAction ?? "",
+    targetItem: active?.targetItem ?? "",
+    targetCount: active?.targetCount ?? 1,
+    failureReason,
+    inventory: worldState.inventory
+      .slice()
+      .sort((left, right) => left.item.localeCompare(right.item))
+      .map((stack) => `${stack.item}:${stack.count}`),
+    hints: worldState.interactionHints.slice(0, 12),
+    resources: worldState.perceivedResources.slice(0, 8),
+    blocks: worldState.nearbyBlocks.slice(0, 8),
+    sight: worldState.lineOfSightTarget ?? "",
+  });
+}
+
+function summarizeRunFailure(trace: DecisionTrace): string | null {
+  if (trace.completedObjective) {
+    return null;
+  }
+
+  return trace.actionOutcome.failureReason ?? trace.stopReason;
 }
 
 function makeFailureSignature(intent: SubgoalIntent, actionOutcome: DecisionStepTrace["actionOutcome"]): string | null {
