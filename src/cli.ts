@@ -26,7 +26,7 @@ const trace = await app.runCycle({
 console.log(JSON.stringify(trace, null, 2));
 
 function resolveExecutorKind(value: string | undefined, liveMineflayerEnabled: boolean): ExecutorKind {
-  if (value === "jarvis" || value === "jarvis-remote" || value === "mineflayer") {
+  if (value === "jarvis" || value === "jarvis-remote" || value === "jarvis-persistent" || value === "mineflayer") {
     return value;
   }
 

@@ -33,6 +33,8 @@ export interface JarvisConfig {
   maxFrames: number;
   temperature: number;
   videoFold: string;
+  // Port of the persistent worker HTTP server on the remote host (loopback only).
+  workerPort: number;
 }
 
 export function loadJarvisConfig(): JarvisConfig {
@@ -49,6 +51,7 @@ export function loadJarvisConfig(): JarvisConfig {
     maxFrames: readNumber(process.env["JARVIS_MAX_FRAMES"], 2),
     temperature: Math.max(0, Math.min(1, readNumber(process.env["JARVIS_TEMPERATURE"], 0.01))),
     videoFold: process.env["JARVIS_VIDEO_FOLD"]?.trim() ?? "logs/tiny",
+    workerPort: readNumber(process.env["JARVIS_WORKER_PORT"], 8765),
   };
 }
 
