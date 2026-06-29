@@ -427,6 +427,11 @@ export class MineflayerExecutor implements ExecutorBackend {
       return;
     }
 
+    if (direction === "up") {
+      await this.ascendForSearch(bot);
+      return;
+    }
+
     const movementState = this.requireMovementState();
     const yaw = this.directionToYaw(bot.entity.yaw, direction);
     await bot.look(yaw, 0, true);
@@ -485,6 +490,25 @@ export class MineflayerExecutor implements ExecutorBackend {
     }
 
     await this.gotoBlock(bot, { x: footPosition.x, y: footPosition.y, z: footPosition.z }, 0);
+  }
+
+  private async ascendForSearch(bot: MineflayerBot): Promise<void> {
+    const movementState = this.requireMovementState();
+    const origin = bot.entity.position.floored();
+    const targetY = Math.min(origin.y + 8, 64);
+    const goal = new movementState.goals.GoalNear(origin.x, targetY, origin.z, 2);
+
+    try {
+      await this.withTimeout(bot.pathfinder.goto(goal), this.config.mineflayer.actionTimeoutMs, "Explore pathing timed out.");
+      return;
+    } catch {
+      // Fall back to stepping upward when pathfinding cannot find a route.
+    }
+
+    bot.setControlState("jump", true);
+    bot.setControlState("forward", true);
+    await this.sleep(1_500);
+    bot.clearControlStates();
   }
 
   private async collect(bot: MineflayerBot, blockType: string, count: number): Promise<void> {
@@ -686,14 +710,24 @@ export class MineflayerExecutor implements ExecutorBackend {
     );
   }
 
+  private findNearbyWaterBlock(bot: MineflayerBot, maxDistance = 48) {
+    return bot.findBlock({
+      matching: (block: { name?: string }) => block.name === "water" || block.name === "flowing_water",
+      maxDistance,
+    });
+  }
+
   private async usePlaceableItem(bot: MineflayerBot, itemName: string, location: string): Promise<void> {
     const needsWater = /water|river|lake|ocean|pond/i.test(location);
-    const target = needsWater
-      ? bot.findBlock({
-          matching: (block) => block.name === "water" || block.name === "flowing_water",
-          maxDistance: 24,
-        })
+    let target = needsWater
+      ? this.findNearbyWaterBlock(bot)
       : bot.blockAtCursor?.(6) ?? null;
+    if (needsWater && !target) {
+      target = bot.findBlock({
+        matching: (block: { name?: string }) => block.name === "water" || block.name === "flowing_water",
+        maxDistance: 64,
+      });
+    }
     if (!target) {
       throw new Error(`No reachable ${needsWater ? "water" : "interaction"} target is available for ${itemName}.`);
     }
@@ -1150,6 +1184,16 @@ export class MineflayerExecutor implements ExecutorBackend {
     }
     if (perceivedResources.includes("oak_tree") || nearbyBlocks.includes("log") || nearbyBlocks.includes("log2")) {
       hints.add("tree_visible");
+    }
+    if (nearbyBlocks.some((block) => /sapling/.test(block)) || inventory.some((stack) => /sapling/.test(stack.item))) {
+      hints.add("sapling_visible");
+    }
+    const nearbyWater = this.findNearbyWaterBlock(bot);
+    if (nearbyWater || nearbyBlocks.includes("water") || nearbyBlocks.includes("flowing_water") || perceivedResources.includes("water")) {
+      hints.add("water_nearby");
+    }
+    if (count(["boat"]) > 0 && (nearbyWater || nearbyBlocks.includes("water"))) {
+      hints.add("can_place_boat");
     }
     if (count(["planks"]) >= 2) {
       hints.add("can_craft_sticks");

@@ -840,3 +840,201 @@ test("PlannerService places an already-crafted generic item at its requested des
   assert.equal(proposal?.candidateAction.arguments.block_type, "boat");
   assert.equal(proposal?.candidateAction.arguments.location, "body_of_water");
 });
+
+test("PlannerService explores to locate water before placing a boat when water is not reachable", async () => {
+  const { PlannerService } = await import("../src/planner/planner_service.ts");
+  const { TaskStackService } = await import("../src/planner/task_stack_service.ts");
+
+  const worldState = {
+    timestamp: new Date().toISOString(),
+    userObjective: "place a boat in water",
+    position: { x: 0, y: 64, z: 0 },
+    biomeOrRegionHint: "plains",
+    health: 20,
+    hunger: 20,
+    inventory: [{ item: "boat", count: 15 }],
+    equippedItem: "air",
+    timeOfDay: "day",
+    sceneSummary: null,
+    visibleHazards: [],
+    perceivedResources: [],
+    nearbyBlocks: ["grass", "dirt"],
+    nearbyEntities: [],
+    lineOfSightTarget: "grass",
+    interactionHints: [],
+    goalProgress: 0.5,
+  };
+
+  const stack = new TaskStackService();
+  stack.reset("place a boat in water", worldState);
+
+  const planner = new PlannerService();
+  const result = await planner.proposeCandidates(
+    worldState,
+    [],
+    {
+      sceneSummary: "Dry grassland nearby.",
+      visibleResources: [],
+      terrainAffordances: ["open_ground"],
+      hazards: [],
+      reachableTargets: [],
+      confidenceNotes: [],
+    },
+    [],
+    stack.getContext(),
+  );
+
+  const proposal = result.proposals[0];
+  assert.ok(proposal, "expected a proposal");
+  assert.notEqual(proposal.candidateAction.name, "place");
+  assert.match(proposal.candidateAction.name, /explore|scan/);
+});
+
+test("PlannerService does not propose placing logs during an explore subtask", async () => {
+  const { PlannerService } = await import("../src/planner/planner_service.ts");
+  const { TaskStackService } = await import("../src/planner/task_stack_service.ts");
+  const { normalizeLlmSubtasks } = await import("../src/planner/task_decomposition_service.ts");
+
+  const worldState = {
+    timestamp: new Date().toISOString(),
+    userObjective: "build a house",
+    position: { x: 0, y: 64, z: 0 },
+    biomeOrRegionHint: "plains",
+    health: 20,
+    hunger: 20,
+    inventory: [{ item: "log", count: 1 }, { item: "planks", count: 9 }],
+    equippedItem: "air",
+    timeOfDay: "day",
+    sceneSummary: null,
+    visibleHazards: [],
+    perceivedResources: ["log"],
+    nearbyBlocks: ["log", "grass"],
+    nearbyEntities: [],
+    lineOfSightTarget: "log",
+    interactionHints: [],
+    goalProgress: 0,
+  };
+
+  const stack = new TaskStackService();
+  stack.reset(worldState.userObjective, worldState, {
+    llmSubtasks: normalizeLlmSubtasks(
+      [
+        {
+          id: "search_trees",
+          description: "Search the surface for trees to gather wood",
+          planningFocus: "explore the surface to locate trees for wood",
+          expectedAction: "explore",
+          targetItem: "oak_log",
+          targetCount: 4,
+          destination: "surface",
+        },
+        {
+          id: "place_table",
+          description: "Place a crafting table",
+          planningFocus: "place one crafting_table nearby",
+          expectedAction: "place",
+          targetItem: "crafting_table",
+          targetCount: 1,
+          destination: "",
+        },
+      ],
+      worldState.userObjective,
+    ),
+  });
+
+  const result = await new PlannerService().proposeCandidates(
+    worldState,
+    [],
+    {
+      sceneSummary: "Trees and logs are nearby.",
+      visibleResources: ["log"],
+      terrainAffordances: ["trees"],
+      hazards: [],
+      reachableTargets: ["log"],
+      confidenceNotes: [],
+    },
+    [],
+    stack.getContext(),
+  );
+
+  const proposal = result.proposals[0];
+  assert.ok(proposal, "expected a proposal");
+  assert.notEqual(proposal.candidateAction.name, "place");
+  assert.match(proposal.candidateAction.name, /explore|scan|collect/);
+});
+
+test("PlannerService explores downward for dig-down subtasks instead of generic repositioning", async () => {
+  const { PlannerService } = await import("../src/planner/planner_service.ts");
+  const { TaskStackService } = await import("../src/planner/task_stack_service.ts");
+  const { normalizeLlmSubtasks } = await import("../src/planner/task_decomposition_service.ts");
+
+  const worldState = {
+    timestamp: new Date().toISOString(),
+    userObjective: "mine for diamonds",
+    position: { x: 0, y: 64, z: 0 },
+    biomeOrRegionHint: "plains",
+    health: 20,
+    hunger: 20,
+    inventory: [{ item: "iron_pickaxe", count: 1 }],
+    equippedItem: "iron_pickaxe",
+    timeOfDay: "day",
+    sceneSummary: null,
+    visibleHazards: [],
+    perceivedResources: [],
+    nearbyBlocks: ["grass", "dirt"],
+    nearbyEntities: [],
+    lineOfSightTarget: "grass",
+    interactionHints: [],
+    goalProgress: 0,
+  };
+
+  const stack = new TaskStackService();
+  stack.reset(worldState.userObjective, worldState, {
+    llmSubtasks: normalizeLlmSubtasks(
+      [
+        {
+          id: "dig_to_diamond_depth",
+          description: "Dig down to Y level 11 or 12 to reach diamond spawning depth",
+          planningFocus: "Dig down to Y level 11 or 12 to reach diamond spawning depth",
+          expectedAction: "explore",
+          targetItem: "",
+          targetCount: 1,
+          destination: "subterranean",
+        },
+        {
+          id: "search_diamond_ore",
+          description: "Search the surrounding stone for diamond ore blocks",
+          planningFocus: "Search the surrounding stone for diamond ore blocks",
+          expectedAction: "explore",
+          targetItem: "diamond_ore",
+          targetCount: 1,
+          destination: "subterranean",
+        },
+      ],
+      worldState.userObjective,
+    ),
+  });
+
+  const result = await new PlannerService().proposeCandidates(
+    worldState,
+    [],
+    {
+      sceneSummary: "Grass surface.",
+      visibleResources: [],
+      terrainAffordances: ["surface"],
+      hazards: [],
+      reachableTargets: [],
+      confidenceNotes: [],
+    },
+    [],
+    stack.getContext(),
+  );
+
+  const proposal = result.proposals[0];
+  assert.ok(proposal, "expected a proposal");
+  assert.notEqual(proposal.plannerId, "planner_delta");
+  assert.notEqual(proposal.strategy, "reposition to a safer, more reachable line");
+  assert.equal(proposal.candidateAction.name, "explore");
+  assert.equal(proposal.candidateAction.arguments.direction, "down");
+  assert.match(proposal.instruction, /dig down|Y level|diamond spawning depth/i);
+});

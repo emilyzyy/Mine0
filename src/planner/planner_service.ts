@@ -2,6 +2,7 @@ import type { CandidateAction, WorldState } from "../contracts/index.ts";
 import type { PredictedFuture } from "../contracts/index.ts";
 import type { PerceptionResult } from "../perception/perception_service.ts";
 import type { TaskPlanningContext } from "./task_stack_service.ts";
+import { actionAllowedForActiveSubtask, remainingSubtaskCount } from "./subtask_progress.ts";
 import { makeId } from "../shared/ids.ts";
 import {
   CerebrasClient,
@@ -158,9 +159,11 @@ function parseRecentActionSnapshots(recentHistorySummary: string[]): RecentActio
 }
 
 function inferCollectBlock(normalizedFocus: string): string | null {
+  if (normalizedFocus.includes("sapling")) return "sapling";
   if (normalizedFocus.includes("diamond")) return "diamond_ore";
   if (normalizedFocus.includes("iron")) return "iron_ore";
   if (normalizedFocus.includes("coal")) return "coal_ore";
+  if (normalizedFocus.includes("sand")) return "sand";
   if (normalizedFocus.includes("cobblestone") || normalizedFocus.includes("stone")) return "stone";
   if (normalizedFocus.includes("log") || normalizedFocus.includes("wood")) return "oak_log";
   return null;
@@ -201,12 +204,37 @@ function inferSmeltPlan(normalizedFocus: string): { inputItem: string; outputIte
   return null;
 }
 
-function inferSearchDomain(normalizedFocus: string, collectBlock: string | null): SearchDomain {
+function inferSearchDomain(
+  normalizedFocus: string,
+  collectBlock: string | null,
+  activeSubtask: TaskPlanningContext["activeSubtask"],
+): SearchDomain {
+  if (activeSubtask?.destination && /\b(water|river|lake|ocean|pond)\b/.test(activeSubtask.destination.toLowerCase())) {
+    return "aquatic";
+  }
+
+  if (activeSubtask?.destination === "surface" || activeSubtask?.destination === "subterranean" || activeSubtask?.destination === "aquatic" || activeSubtask?.destination === "local") {
+    return activeSubtask.destination;
+  }
+
+  if (/(locate|search|pathfind|reach)\b/.test(normalizedFocus)) {
+    if (/\b(surface|overground|trees?|forest|wood|sapling)\b/.test(normalizedFocus)) {
+      return "surface";
+    }
+    if (/\b(underground|deeper|below|ore|cave|mine)\b/.test(normalizedFocus)) {
+      return "subterranean";
+    }
+    if (/\b(water|river|lake|ocean|pond)\b/.test(normalizedFocus)) {
+      return "aquatic";
+    }
+  }
+
   if (
     normalizedFocus.includes("ore") ||
     normalizedFocus.includes("underground") ||
     normalizedFocus.includes("deeper") ||
-    normalizedFocus.includes("below")
+    normalizedFocus.includes("below") ||
+    /\b(dig down|y level|depth|descend|spawning depth)\b/.test(normalizedFocus)
   ) {
     return "subterranean";
   }
@@ -215,25 +243,33 @@ function inferSearchDomain(normalizedFocus: string, collectBlock: string | null)
     return "subterranean";
   }
 
-  if (collectBlock === "oak_log") {
+  if (collectBlock === "oak_log" || collectBlock === "sapling" || collectBlock === "sand") {
     return "surface";
   }
 
   return "local";
 }
 
-function inferFocusProfile(focus: string): FocusProfile {
+function inferFocusProfile(focus: string, activeSubtask: TaskPlanningContext["activeSubtask"] = null): FocusProfile {
   const normalizedFocus = focus.toLowerCase();
   const craftItem = extractCraftItemFromFocus(normalizedFocus);
-  const collectBlock = inferCollectBlock(normalizedFocus);
+  let collectBlock = inferCollectBlock(normalizedFocus);
+  if (!collectBlock && activeSubtask?.targetItem) {
+    collectBlock = findItemObtainSpec(activeSubtask.targetItem)?.collectBlock ?? activeSubtask.targetItem;
+  }
+  const locateSpec = activeSubtask ? inferLocateSpec(activeSubtask) : null;
   return {
     focus,
     normalizedFocus,
     craftItem,
     smeltPlan: inferSmeltPlan(normalizedFocus),
-    placementBlock: inferPlacementBlock(normalizedFocus),
+    placementBlock:
+      inferPlacementBlock(normalizedFocus) ??
+      (activeSubtask?.expectedAction === "place" || activeSubtask?.expectedAction === "use"
+        ? activeSubtask.targetItem ?? null
+        : null),
     collectBlock,
-    searchDomain: inferSearchDomain(normalizedFocus, collectBlock),
+    searchDomain: locateSpec?.searchDomain ?? inferSearchDomain(normalizedFocus, collectBlock, activeSubtask),
   };
 }
 
@@ -264,11 +300,57 @@ function recentActionsShowLoop(history: RecentActionSnapshot[]): boolean {
   return stagnantSearches.length >= 3 && (repeatedDirections.size <= 2 || clusteredPositions);
 }
 
+function recentPlaceFailureForDestination(recentHistorySummary: string[], destinationId: string): boolean {
+  const needle = destinationId.toLowerCase();
+  return recentHistorySummary.some((entry) => {
+    const lower = entry.toLowerCase();
+    return (
+      lower.includes("place") &&
+      lower.includes("failed") &&
+      (lower.includes("no reachable water") ||
+        lower.includes("unable to find a valid nearby placement") ||
+        lower.includes(needle))
+    );
+  });
+}
+
+function destinationReadyForPlacement(
+  worldState: WorldState,
+  activeSubtask: TaskPlanningContext["activeSubtask"],
+  normalizedFocus: string,
+): boolean {
+  const destinationSpec = inferDestinationRequirement({
+    planningFocus: activeSubtask?.planningFocus ?? normalizedFocus,
+    destination: activeSubtask?.destination,
+  });
+  if (!destinationSpec) {
+    return true;
+  }
+  return isDestinationAccessible(destinationSpec, worldState);
+}
+
 function chooseSearchDirection(
   worldState: WorldState,
   history: RecentActionSnapshot[],
   searchDomain: SearchDomain,
+  planningFocus = "",
 ): string {
+  const normalizedFocus = planningFocus.toLowerCase();
+  const wantsDepth =
+    searchDomain === "subterranean" ||
+    /\b(dig down|deeper|y level|depth|below|descend|spawning depth)\b/.test(normalizedFocus);
+
+  if (wantsDepth && worldState.position.y > 12) {
+    return "down";
+  }
+
+  if (searchDomain === "surface" && worldState.position.y < 58) {
+    const recentUp = history.slice(-3).some((entry) => entry.direction === "up");
+    if (!recentUp) {
+      return "up";
+    }
+  }
+
   if (searchDomain === "subterranean" && worldState.position.y > 16) {
     const recentSearchCount = history.slice(-4).filter((entry) => entry.action === "explore" || entry.action === "scan").length;
     if (recentActionsShowLoop(history) || recentSearchCount >= 2) {
@@ -284,7 +366,9 @@ function chooseSearchDirection(
   const candidates =
     searchDomain === "subterranean"
       ? ["forward_left", "forward_right", "left", "right", "forward", "down"]
-      : ["forward_left", "forward_right", "left", "right", "forward", "backward"];
+      : searchDomain === "aquatic"
+        ? ["forward_left", "forward_right", "left", "right", "forward", "backward"]
+        : ["forward_left", "forward_right", "left", "right", "forward", "backward"];
   const unexplored = candidates.find((direction) => !recentlyUsed.includes(direction));
   if (unexplored) {
     return unexplored;
@@ -313,6 +397,8 @@ function shouldScanBeforeSearch(
 
 function blockAliases(blockType: string): string[] {
   switch (blockType) {
+    case "sapling":
+      return ["sapling", "oak_sapling", "spruce_sapling", "birch_sapling", "leaves", "leaves2"];
     case "oak_log":
       return ["oak_log", "log", "log2", "oak_tree"];
     case "stone":
@@ -380,6 +466,14 @@ import {
   hasNearbyCraftingTable,
   requiresPlacedCraftingTable,
 } from "./craft_prerequisites.ts";
+import {
+  findItemObtainSpec,
+  inferDestinationRequirement,
+  inferLocateSpec,
+  inventoryHasItem,
+  isDestinationAccessible,
+  isTargetVisibleForItem,
+} from "./goal_prerequisites.ts";
 
 function canPlaceDoorNearby(worldState: WorldState): boolean {
   return (
@@ -542,25 +636,115 @@ function makeCraftDoorProposal(planks: number): PlannerProposal {
   };
 }
 
-function ensureHeuristicFallback(proposals: PlannerProposal[], logs: number): PlannerProposal[] {
+function buildActiveSubtaskFallback(
+  taskContext: TaskPlanningContext | null,
+  worldState: WorldState,
+  recentHistorySummary: string[],
+): PlannerProposal | null {
+  const active = taskContext?.activeSubtask;
+  if (!active?.expectedAction) {
+    return null;
+  }
+
+  const history = parseRecentActionSnapshots(recentHistorySummary);
+  const profile = inferFocusProfile(active.planningFocus, active);
+  const direction = chooseSearchDirection(worldState, history, profile.searchDomain, active.planningFocus);
+  const successItem = active.targetItem ?? profile.collectBlock ?? profile.placementBlock ?? "progress";
+  const successCount = active.targetCount ?? 1;
+
+  switch (active.expectedAction) {
+    case "explore":
+      return {
+        plannerId: "planner_subtask_explore",
+        strategy: active.description,
+        instruction: active.planningFocus,
+        candidateAction: {
+          name: "explore",
+          arguments: { direction },
+          reason: `Advance the active subtask: ${active.description}`,
+        },
+        successCondition: { item: successItem, count: successCount },
+        maximumSteps: profile.searchDomain === "subterranean" ? 240 : 160,
+      };
+    case "scan":
+      return {
+        plannerId: "planner_subtask_scan",
+        strategy: active.description,
+        instruction: active.planningFocus,
+        candidateAction: {
+          name: "scan",
+          arguments: { direction },
+          reason: `Advance the active subtask: ${active.description}`,
+        },
+        successCondition: { item: successItem, count: successCount },
+        maximumSteps: 80,
+      };
+    case "collect":
+      return {
+        plannerId: "planner_subtask_collect",
+        strategy: active.description,
+        instruction: active.planningFocus,
+        candidateAction: {
+          name: "collect",
+          arguments: {
+            block_type: active.targetItem ?? profile.collectBlock ?? "resource",
+            count: Math.max(1, remainingSubtaskCount(active, worldState.inventory)),
+          },
+          reason: `Advance the active subtask: ${active.description}`,
+        },
+        successCondition: { item: successItem, count: successCount },
+        maximumSteps: 180,
+      };
+    case "craft":
+      return {
+        plannerId: "planner_subtask_craft",
+        strategy: active.description,
+        instruction: active.planningFocus,
+        candidateAction: {
+          name: "craft",
+          arguments: {
+            item: active.targetItem ?? profile.craftItem ?? "item",
+            count: successCount,
+          },
+          reason: `Advance the active subtask: ${active.description}`,
+        },
+        successCondition: { item: successItem, count: successCount },
+        maximumSteps: 180,
+      };
+    case "place":
+    case "use":
+      return {
+        plannerId: "planner_subtask_place",
+        strategy: active.description,
+        instruction: active.planningFocus,
+        candidateAction: {
+          name: "place",
+          arguments: {
+            block_type: active.targetItem ?? profile.placementBlock ?? "block",
+            location: active.destination ?? "nearby",
+          },
+          reason: `Advance the active subtask: ${active.description}`,
+        },
+        successCondition: { item: successItem, count: successCount },
+        maximumSteps: 180,
+      };
+    default:
+      return null;
+  }
+}
+
+function ensureHeuristicFallback(
+  proposals: PlannerProposal[],
+  taskContext: TaskPlanningContext | null,
+  worldState: WorldState,
+  recentHistorySummary: string[],
+): PlannerProposal[] {
   if (proposals.length > 0) {
     return proposals;
   }
 
-  return [
-    {
-      plannerId: "planner_delta",
-      strategy: "reposition to a safer, more reachable line",
-      instruction: "Explore a short path toward the open grass corridor",
-      candidateAction: {
-        name: "explore",
-        arguments: { direction: "forward" },
-        reason: "Better positioning can reduce collection time and pathing failures.",
-      },
-      successCondition: { item: "oak_log", count: Math.max(1, 3 - logs) },
-      maximumSteps: 140,
-    },
-  ];
+  const fallback = buildActiveSubtaskFallback(taskContext, worldState, recentHistorySummary);
+  return fallback ? [fallback] : proposals;
 }
 
 function prioritizeHeuristicProposals(
@@ -580,8 +764,23 @@ function prioritizeHeuristicProposals(
     const actionName = proposal.candidateAction.name;
     const blockType = String(proposal.candidateAction.arguments.block_type ?? "");
     const craftItem = String(proposal.candidateAction.arguments.item ?? "");
+    const destinationSpec = inferDestinationRequirement({ planningFocus: objective });
+    if (destinationSpec && !isDestinationAccessible(destinationSpec, worldState)) {
+      if (actionName === "explore" || actionName === "scan") {
+        return 0;
+      }
+      if (actionName === "place") {
+        return 20;
+      }
+    }
     if (actionName === "place" && wantsDoorPlacement && doors >= 1 && blockType.includes("door")) {
       return 0;
+    }
+    if (/\b(locate|search|pathfind|reach)\b/.test(objective) && actionName === "explore") {
+      return 0;
+    }
+    if (/\b(locate|search|pathfind|reach)\b/.test(objective) && actionName === "scan") {
+      return 1;
     }
     if (
       actionName === "place" &&
@@ -633,13 +832,34 @@ function prioritizeHeuristicProposals(
   return [...proposals].sort((left, right) => score(left) - score(right));
 }
 
+function filterProposalsForActiveSubtask(
+  proposals: PlannerProposal[],
+  taskContext: TaskPlanningContext | null,
+  worldState: WorldState,
+): PlannerProposal[] {
+  const active = taskContext?.activeSubtask ?? null;
+  if (!active?.expectedAction) {
+    return proposals;
+  }
+
+  return proposals.filter((proposal) =>
+    actionAllowedForActiveSubtask(proposal.candidateAction.name, active, worldState),
+  );
+}
+
 function finalizeHeuristicProposals(
   proposals: PlannerProposal[],
   worldState: WorldState,
   memorySummary: string[],
-  logs: number,
+  taskContext: TaskPlanningContext | null,
+  recentHistorySummary: string[],
 ): PlannerProposal[] {
-  let deduped = ensureHeuristicFallback(dedupeByAction(proposals), logs);
+  let deduped = ensureHeuristicFallback(
+    dedupeByAction(proposals),
+    taskContext,
+    worldState,
+    recentHistorySummary,
+  );
 
   if (hasRecentFailedScan(memorySummary)) {
     deduped = deduped.sort((left, right) =>
@@ -751,15 +971,20 @@ export class PlannerService {
     });
     const liveProposal = result.data ? this.fromStructured(result.data) : null;
     const liveProposals =
-      liveProposal && !this.shouldOverrideStructuredProposal(planningState, liveProposal, memorySummary)
+      liveProposal && !this.shouldOverrideStructuredProposal(planningState, liveProposal, memorySummary, taskContext)
         ? [liveProposal]
         : [];
     const logs = countItem(planningState, "oak_log");
     const proposals = finalizeHeuristicProposals(
-      [...liveProposals, ...heuristic],
+      filterProposalsForActiveSubtask(
+        [...liveProposals, ...heuristic],
+        taskContext,
+        planningState,
+      ),
       planningState,
       memorySummary,
-      logs,
+      taskContext,
+      recentHistorySummary,
     ).slice(0, 1);
 
     return {
@@ -776,7 +1001,7 @@ export class PlannerService {
   ): PlannerProposal[] {
     const objective = worldState.userObjective.toLowerCase();
     const activeFocus = taskContext?.activeSubtask?.planningFocus ?? worldState.userObjective;
-    const profile = inferFocusProfile(activeFocus);
+    const profile = inferFocusProfile(activeFocus, taskContext?.activeSubtask ?? null);
     const history = parseRecentActionSnapshots(recentHistorySummary);
     const logs = countItem(worldState, "oak_log");
     const planks = countItem(worldState, "oak_planks");
@@ -795,6 +1020,106 @@ export class PlannerService {
       entry.includes("collect") && entry.includes("failed"),
     );
     const proposeCraftingTable = shouldProposeCraftingTable(worldState, recentHistorySummary);
+    const activeSubtask = taskContext?.activeSubtask ?? null;
+    const destinationSpec = inferDestinationRequirement({
+      planningFocus: activeFocus,
+      destination: activeSubtask?.destination,
+    });
+    const destinationAccessible = destinationReadyForPlacement(worldState, activeSubtask, profile.normalizedFocus);
+    const isLocateSubtask =
+      activeSubtask?.expectedAction === "explore" ||
+      /\b(locate|search|pathfind|reach)\b/.test(activeFocus.toLowerCase());
+
+    if (isLocateSubtask || (destinationSpec && !destinationAccessible)) {
+      const searchDomain = isLocateSubtask ? profile.searchDomain : (destinationSpec?.searchDomain ?? "aquatic");
+      const direction = chooseSearchDirection(worldState, history, searchDomain, activeFocus);
+      const activeExploreCopy = activeSubtask?.expectedAction === "explore";
+      if (shouldScanBeforeSearch(memorySummary, history, profile) && !activeExploreCopy) {
+        proposals.push({
+          plannerId: "planner_scan_for_locate",
+          strategy: `scan toward ${searchDomain} before moving to locate the target area`,
+          instruction:
+            direction === "up"
+              ? "Scan upward and outward for a path to the surface"
+              : `Scan ${direction} for the next search frontier`,
+          candidateAction: {
+            name: "scan",
+            arguments: { direction },
+            reason: destinationSpec
+              ? `The placement destination (${destinationSpec.id}) must be found before attempting placement again.`
+              : "The active subtask is to locate a resource area, so visibility should improve before pathfinding.",
+          },
+          successCondition: { item: profile.collectBlock ?? profile.placementBlock ?? "water", count: 1 },
+          maximumSteps: 80,
+        });
+      }
+
+      proposals.push({
+        plannerId: "planner_locate_frontier",
+        strategy: activeExploreCopy && activeSubtask
+          ? activeSubtask.description
+          : direction === "up"
+            ? "pathfind upward to the surface before searching for the target resource area"
+            : destinationSpec
+              ? `pathfind toward ${destinationSpec.id} before attempting the placement`
+              : `pathfind toward a ${searchDomain} frontier for the active subtask`,
+        instruction: activeExploreCopy && activeSubtask
+          ? activeSubtask.planningFocus
+          : direction === "up"
+            ? "Explore upward toward the surface"
+            : direction === "down"
+              ? "Explore downward to open a deeper search path"
+              : destinationSpec
+                ? `Explore ${direction} to locate ${destinationSpec.id} for the pending placement`
+                : `Explore ${direction} toward a less-revisited ${searchDomain} frontier`,
+        candidateAction: {
+          name: "explore",
+          arguments: { direction },
+          reason: activeExploreCopy && activeSubtask
+            ? `Advance the active subtask: ${activeSubtask.description}`
+            : destinationSpec
+              ? `The placement destination (${destinationSpec.id}) is not reachable from here yet, so the bot must locate it first.`
+              : direction === "up"
+                ? "The active subtask needs surface resources, but the bot is too deep underground to see them yet."
+                : direction === "down"
+                  ? "The active subtask requires going deeper before the next step can succeed."
+                  : "The active subtask is to locate a resource area that is not visible from the current position.",
+        },
+        successCondition: {
+          item: activeSubtask?.targetItem ?? profile.collectBlock ?? profile.placementBlock ?? "water",
+          count: activeSubtask?.targetCount ?? 1,
+        },
+        maximumSteps: searchDomain === "subterranean" ? 240 : 160,
+      });
+    }
+
+    if (
+      profile.collectBlock &&
+      !profile.smeltPlan &&
+      !isLocateSubtask &&
+      isTargetVisibleForItem(worldState, profile.collectBlock) &&
+      actionAllowedForActiveSubtask("collect", activeSubtask, worldState)
+    ) {
+      const remaining = activeSubtask?.targetItem
+        ? remainingSubtaskCount(activeSubtask, worldState.inventory)
+        : inventoryHasItem(worldState.inventory, profile.collectBlock)
+          ? 0
+          : 1;
+      if (remaining > 0) {
+        proposals.push({
+          plannerId: `planner_collect_visible_${profile.collectBlock}`,
+          strategy: `collect the visible ${profile.collectBlock} for the active subtask`,
+          instruction: `Collect ${remaining} ${profile.collectBlock}`,
+          candidateAction: {
+            name: "collect",
+            arguments: { block_type: profile.collectBlock, count: remaining },
+            reason: "The required resource is already visible, so collection is the direct next step in the dependency tree.",
+          },
+          successCondition: { item: profile.collectBlock, count: remaining },
+          maximumSteps: 180,
+        });
+      }
+    }
 
     if (shouldProposePlaceCraftingTable(worldState, blockCraftingTablePlace)) {
       proposals.push(
@@ -832,7 +1157,10 @@ export class PlannerService {
     if (
       profile.placementBlock &&
       !["crafting_table", "wooden_door", "furnace"].includes(profile.placementBlock) &&
-      countItem(worldState, profile.placementBlock) >= 1
+      countItem(worldState, profile.placementBlock) >= 1 &&
+      destinationAccessible &&
+      !(destinationSpec && recentPlaceFailureForDestination(recentHistorySummary, destinationSpec.id)) &&
+      actionAllowedForActiveSubtask("place", activeSubtask, worldState)
     ) {
       const location = inferPlacementLocation(profile.normalizedFocus);
       proposals.push({
@@ -1044,7 +1372,7 @@ export class PlannerService {
     }
 
     if (profile.collectBlock && !profile.smeltPlan && !canSeeTargetBlock(worldState, profile.collectBlock)) {
-      const direction = chooseSearchDirection(worldState, history, profile.searchDomain);
+      const direction = chooseSearchDirection(worldState, history, profile.searchDomain, profile.focus);
       if (shouldScanBeforeSearch(memorySummary, history, profile)) {
         proposals.push({
           plannerId: "planner_scan_for_subtask",
@@ -1108,7 +1436,7 @@ export class PlannerService {
       );
     }
 
-    return finalizeHeuristicProposals(proposals, worldState, memorySummary, logs);
+    return finalizeHeuristicProposals(proposals, worldState, memorySummary, taskContext, recentHistorySummary);
   }
 
   private fromStructured(value: PlannerProposalResponse): PlannerProposal {
@@ -1139,8 +1467,16 @@ export class PlannerService {
     worldState: WorldState,
     proposal: PlannerProposal,
     memorySummary: string[],
+    taskContext: TaskPlanningContext | null = null,
   ): boolean {
-    const profile = inferFocusProfile(worldState.userObjective);
+    if (
+      taskContext?.activeSubtask &&
+      !actionAllowedForActiveSubtask(proposal.candidateAction.name, taskContext.activeSubtask, worldState)
+    ) {
+      return true;
+    }
+
+    const profile = inferFocusProfile(worldState.userObjective, taskContext?.activeSubtask ?? null);
     if (proposal.candidateAction.name === "scan" && hasRecentFailedScan(memorySummary)) {
       return true;
     }
@@ -1188,6 +1524,13 @@ export class PlannerService {
       proposal.candidateAction.name === "craft" &&
       requiresPlacedCraftingTable(craftItem) &&
       !hasNearbyCraftingTable(worldState)
+    ) {
+      return true;
+    }
+
+    if (
+      proposal.candidateAction.name === "place" &&
+      !destinationReadyForPlacement(worldState, null, worldState.userObjective.toLowerCase())
     ) {
       return true;
     }

@@ -8,6 +8,24 @@ import {
   extractCraftItemFromFocus,
   prependWorkstationPrerequisites,
 } from "./craft_prerequisites.ts";
+import {
+  collectFailureNeedsLocate,
+  expandAccessPrerequisites,
+  expandDestinationPrerequisites,
+  expandGoalPrerequisites,
+  expandObtainItemChain,
+  inventoryHasItem,
+  locateSearchSatisfied,
+  parseGoalFromObjective,
+  placeFailureNeedsLocateDestination,
+  verificationNeedsLocateSubtask,
+  inferDestinationRequirement,
+} from "./goal_prerequisites.ts";
+import type { VerificationResult } from "../verifier/verification_service.ts";
+import {
+  subtaskCompletesFromInventory,
+  subtaskRequirementMet,
+} from "./subtask_progress.ts";
 
 export interface Subtask {
   id: string;
@@ -17,6 +35,7 @@ export interface Subtask {
   parentId?: string;
   expectedAction?: string;
   targetItem?: string;
+  targetCount?: number;
   destination?: string;
 }
 
@@ -35,6 +54,14 @@ export interface TaskPlanningContext {
   pendingSubtasks: Subtask[];
   completedSubtasks: Subtask[];
   taskTree?: TaskTreeNode;
+}
+
+export interface TaskStackResetOptions {
+  llmSubtasks?: Subtask[];
+}
+
+export interface TaskStackStepOptions {
+  skipFailureHeuristics?: boolean;
 }
 
 const SMELT_FOCUS_RULES: Array<{ outputItem: string; keywords: string[] }> = [
@@ -59,8 +86,17 @@ function inferSmeltOutputFromFocus(focus: string): string | null {
   return null;
 }
 
-function inventoryMeetsFocus(focus: string, inventory: WorldState["inventory"]): boolean {
+function inventoryMeetsFocus(focus: string, inventory: WorldState["inventory"], targetItem?: string | null): boolean {
   const normalized = focus.toLowerCase();
+
+  if (targetItem && inventoryHasItem(inventory, targetItem)) {
+    if (normalized.includes("place") || normalized.includes("plant") || normalized.includes("use")) {
+      return true;
+    }
+    if (normalized.includes("collect") || normalized.includes("obtain")) {
+      return true;
+    }
+  }
 
   if (normalized.includes("iron pickaxe")) {
     return countInventoryItem(inventory, "iron_pickaxe") >= 1;
@@ -76,6 +112,11 @@ function inventoryMeetsFocus(focus: string, inventory: WorldState["inventory"]):
 
   if (normalized.includes("diamond")) {
     return countInventoryItem(inventory, "diamond") >= 1;
+  }
+
+  const parsed = parseGoalFromObjective(focus);
+  if (parsed && (parsed.action === "collect" || parsed.action === "place" || parsed.action === "use")) {
+    return inventoryHasItem(inventory, parsed.targetItem);
   }
 
   return false;
@@ -97,7 +138,7 @@ function decomposeSequentialObjective(objective: string): Subtask[] {
   let referencedItem: string | null = null;
 
   for (const clause of clauses) {
-    const actionMatch = clause.trim().toLowerCase().match(/^(craft|make|place|put|collect|gather|mine|smelt|equip|use)\b\s*(.*)$/i);
+    const actionMatch = clause.trim().toLowerCase().match(/^(craft|make|place|put|collect|gather|mine|smelt|equip|use|plant|grow)\b\s*(.*)$/i);
     if (!actionMatch) {
       continue;
     }
@@ -106,7 +147,7 @@ function decomposeSequentialObjective(objective: string): Subtask[] {
     const remainder = actionMatch[2]?.trim() ?? "";
     const expectedAction = rawAction === "make"
       ? "craft"
-      : rawAction === "put"
+      : rawAction === "put" || rawAction === "plant" || rawAction === "grow"
         ? "place"
         : rawAction === "gather" || rawAction === "mine"
           ? "collect"
@@ -140,11 +181,58 @@ function decomposeSequentialObjective(objective: string): Subtask[] {
   return tasks.length >= 2 ? tasks : [];
 }
 
+function decomposeGenericObjective(objective: string): Subtask[] | null {
+  const normalized = objective.toLowerCase();
+  if (
+    normalized.includes(" around ") ||
+    normalized.includes("pickaxe") ||
+    (normalized.includes("diamond") && normalized.includes("mine")) ||
+    (normalized.includes("iron") && normalized.includes("ore") && normalized.includes("mine"))
+  ) {
+    return null;
+  }
+
+  const parsed = parseGoalFromObjective(objective);
+  if (!parsed) {
+    return null;
+  }
+
+  const readableItem = parsed.targetItem.replace(/_/g, " ");
+  const verb =
+    parsed.action === "place"
+      ? "Place"
+      : parsed.action === "craft"
+        ? "Craft"
+        : parsed.action === "collect"
+          ? "Collect"
+          : parsed.action === "smelt"
+            ? "Smelt"
+            : parsed.action.charAt(0).toUpperCase() + parsed.action.slice(1);
+
+  return [
+    {
+      id: `goal_${parsed.action}_${taskIdPart(parsed.targetItem)}`,
+      description: `${verb} ${readableItem}${parsed.destination ? ` ${parsed.destination}` : ""}`,
+      planningFocus: `${parsed.action} one ${parsed.targetItem}${parsed.destination ? ` ${parsed.destination}` : ""}`,
+      compound: false,
+      parentId: "goal",
+      expectedAction: parsed.action,
+      targetItem: parsed.targetItem,
+      ...(parsed.destination ? { destination: parsed.destination } : {}),
+    },
+  ];
+}
+
 function decomposeRootObjective(objective: string, worldState: WorldState): Subtask[] {
   const normalized = objective.toLowerCase();
   const sequentialTasks = decomposeSequentialObjective(objective);
   if (sequentialTasks.length > 0) {
     return sequentialTasks;
+  }
+
+  const genericTasks = decomposeGenericObjective(objective);
+  if (genericTasks) {
+    return genericTasks;
   }
 
   if (normalized.includes("iron pickaxe") || (normalized.includes("iron") && normalized.includes("pickaxe"))) {
@@ -233,13 +321,14 @@ function makeCollectSubtask(id: string, description: string, focus: string): Sub
   };
 }
 
-function makePlaceSubtask(id: string, description: string, focus: string): Subtask {
+function makePlaceSubtask(id: string, description: string, focus: string, targetItem?: string): Subtask {
   return {
     id,
     description,
     planningFocus: focus,
     compound: false,
     expectedAction: "place",
+    ...(targetItem ? { targetItem } : {}),
   };
 }
 
@@ -325,7 +414,7 @@ function expandIronPickaxeChain(worldState: WorldState): Subtask[] {
       tasks.push(makeCraftSubtask("craft_furnace", "Craft a furnace", "furnace"));
     }
     if (furnaces > 0 && !furnaceNearby) {
-      tasks.push(makePlaceSubtask("place_furnace", "Place a furnace within reach", "place one furnace nearby"));
+      tasks.push(makePlaceSubtask("place_furnace", "Place a furnace within reach", "place one furnace nearby", "furnace"));
     }
     tasks.push(makeSmeltSubtask("smelt_iron_ingots", "Smelt iron ore into iron ingots", "smelt iron ore into iron ingots"));
   }
@@ -398,11 +487,28 @@ function expandCollectionChain(focus: string, worldState: WorldState): Subtask[]
   return tasks;
 }
 
-function expandCompoundSubtask(subtask: Subtask, worldState: WorldState): Subtask[] {
+function expandCompoundSubtask(
+  subtask: Subtask,
+  worldState: WorldState,
+  satisfiedLocateIds: ReadonlySet<string> = new Set(),
+): Subtask[] {
   const focus = subtask.planningFocus.toLowerCase();
 
-  if (inventoryMeetsFocus(focus, worldState.inventory)) {
+  if (inventoryMeetsFocus(focus, worldState.inventory, subtask.targetItem)) {
     return [subtask];
+  }
+
+  const parsedGoal = parseGoalFromObjective(subtask.planningFocus);
+  if (parsedGoal && (parsedGoal.action === "place" || parsedGoal.action === "use")) {
+    const atomicGoal: Subtask = {
+      ...subtask,
+      compound: false,
+      expectedAction: parsedGoal.action,
+      targetItem: parsedGoal.targetItem,
+      ...(parsedGoal.destination ? { destination: parsedGoal.destination } : {}),
+      planningFocus: `${parsedGoal.action} one ${parsedGoal.targetItem}${parsedGoal.destination ? ` ${parsedGoal.destination}` : ""}`,
+    };
+    return expandGoalPrerequisites(atomicGoal, worldState, satisfiedLocateIds);
   }
 
   if (focus.includes("iron pickaxe")) {
@@ -422,6 +528,14 @@ function expandCompoundSubtask(subtask: Subtask, worldState: WorldState): Subtas
     return prependWorkstationPrerequisites(worldState, [subtask]);
   }
 
+  if (subtask.expectedAction === "place" || subtask.expectedAction === "use") {
+    return expandGoalPrerequisites(subtask, worldState, satisfiedLocateIds);
+  }
+
+  if (subtask.expectedAction === "collect" && subtask.targetItem) {
+    return [...expandObtainItemChain(subtask.targetItem, worldState, subtask.parentId ?? subtask.id), subtask];
+  }
+
   return [subtask];
 }
 
@@ -435,21 +549,44 @@ function stepSatisfiesSubtask(
     return false;
   }
 
+  if (subtaskCompletesFromInventory(subtask, worldState)) {
+    return true;
+  }
+
   if (subtask.compound) {
-    return inventoryMeetsFocus(subtask.planningFocus, worldState.inventory);
+    return inventoryMeetsFocus(subtask.planningFocus, worldState.inventory, subtask.targetItem);
   }
 
   const actionName = intent.candidateAction.name;
+
+  if (
+    (subtask.expectedAction === "explore" || /(locate|search|pathfind|reach)\b/.test(subtask.planningFocus.toLowerCase())) &&
+    (actionName === "explore" || actionName === "scan")
+  ) {
+    if (subtask.targetItem && subtaskRequirementMet(subtask, worldState.inventory)) {
+      return true;
+    }
+    return locateSearchSatisfied(subtask, outcome, worldState);
+  }
   const focus = subtask.planningFocus.toLowerCase();
   const craftItem = String(intent.candidateAction.arguments.item ?? "").toLowerCase();
 
   if (subtask.expectedAction === actionName) {
     if (actionName === "craft") {
-      return !subtask.targetItem || craftItem === subtask.targetItem;
+      if (subtask.targetItem && craftItem !== subtask.targetItem) {
+        return false;
+      }
+      return subtask.targetItem ? subtaskRequirementMet(subtask, worldState.inventory) : true;
     }
     if (actionName === "place") {
       const placedItem = String(intent.candidateAction.arguments.block_type ?? "").toLowerCase();
-      return !subtask.targetItem || placedItem === subtask.targetItem;
+      if (subtask.targetItem && placedItem !== subtask.targetItem) {
+        return false;
+      }
+      return true;
+    }
+    if (actionName === "collect" && subtask.targetItem) {
+      return subtaskRequirementMet(subtask, worldState.inventory);
     }
     return true;
   }
@@ -502,6 +639,9 @@ function stepSatisfiesSubtask(
   }
 
   if (focus.includes("collect") && actionName === "collect") {
+    if (subtask.targetItem) {
+      return subtaskRequirementMet(subtask, worldState.inventory);
+    }
     if (focus.includes("iron")) {
       return String(intent.candidateAction.arguments.block_type ?? "").includes("iron");
     }
@@ -511,11 +651,24 @@ function stepSatisfiesSubtask(
     if (focus.includes("stone") || focus.includes("cobblestone")) {
       return /(stone|cobblestone)/.test(String(intent.candidateAction.arguments.block_type ?? ""));
     }
+    if (focus.includes("sapling")) {
+      return /sapling/.test(String(intent.candidateAction.arguments.block_type ?? ""));
+    }
     return true;
   }
 
   if (focus.includes("mine") && actionName === "collect") {
-    return true;
+    return subtask.targetItem
+      ? subtaskRequirementMet(subtask, worldState.inventory)
+      : true;
+  }
+
+  if (
+    (focus.includes("gather") || focus.includes("obtain")) &&
+    actionName === "collect" &&
+    subtask.targetItem
+  ) {
+    return subtaskRequirementMet(subtask, worldState.inventory);
   }
 
   return false;
@@ -527,18 +680,45 @@ export class TaskStackService {
   private pending: Subtask[] = [];
   private completed: Subtask[] = [];
   private readonly catalog = new Map<string, Subtask>();
+  private satisfiedDestinationLocates = new Set<string>();
+  private llmPlanned = false;
 
-  reset(objective: string, worldState: WorldState): void {
+  reset(objective: string, worldState: WorldState, options: TaskStackResetOptions = {}): void {
     this.rootObjective = objective;
-    this.rootSubtasks = decomposeRootObjective(objective, worldState).map((task) => ({
+    this.llmPlanned = Boolean(options.llmSubtasks?.length);
+    this.rootSubtasks = (options.llmSubtasks?.length
+      ? options.llmSubtasks
+      : decomposeRootObjective(objective, worldState)
+    ).map((task) => ({
       ...task,
       parentId: task.parentId ?? "goal",
+      compound: this.llmPlanned ? false : task.compound,
     }));
     this.pending = [];
     this.completed = [];
     this.catalog.clear();
+    this.satisfiedDestinationLocates.clear();
     this.registerTasks(this.rootSubtasks);
     this.reconcile(worldState);
+  }
+
+  isLlmPlanned(): boolean {
+    return this.llmPlanned;
+  }
+
+  prependSubtasks(subtasks: Subtask[]): void {
+    if (subtasks.length === 0) {
+      return;
+    }
+
+    const active = this.pending[0];
+    const normalized = subtasks.map((subtask) => ({
+      ...subtask,
+      compound: false,
+      parentId: subtask.parentId ?? active?.parentId ?? "goal",
+    }));
+    this.registerTasks(normalized);
+    this.pending = [...normalized, ...this.pending];
   }
 
   reconcile(worldState: WorldState): void {
@@ -548,9 +728,11 @@ export class TaskStackService {
         return [];
       }
 
-      return rootSubtask.compound
-        ? expandCompoundSubtask(rootSubtask, worldState)
-        : [rootSubtask];
+      if (this.llmPlanned || !rootSubtask.compound) {
+        return [rootSubtask];
+      }
+
+      return expandCompoundSubtask(rootSubtask, worldState, this.satisfiedDestinationLocates);
     });
     this.registerTasks(rebuilt);
 
@@ -570,6 +752,13 @@ export class TaskStackService {
       return true;
     });
     this.expandPendingHead(worldState);
+    this.advanceInventorySatisfiedHeads(worldState);
+  }
+
+  private advanceInventorySatisfiedHeads(worldState: WorldState): void {
+    while (this.pending[0] && subtaskCompletesFromInventory(this.pending[0], worldState)) {
+      this.completed.push(this.pending.shift() as Subtask);
+    }
   }
 
   getContext(): TaskPlanningContext {
@@ -586,19 +775,29 @@ export class TaskStackService {
     return this.pending[0]?.planningFocus ?? this.rootObjective;
   }
 
-  onStepComplete(intent: SubgoalIntent, outcome: ActionOutcome, worldState: WorldState): void {
+  onStepComplete(
+    intent: SubgoalIntent,
+    outcome: ActionOutcome,
+    worldState: WorldState,
+    verification: VerificationResult | null = null,
+    options: TaskStackStepOptions = {},
+  ): void {
     const current = this.pending[0];
     if (!current) {
       return;
     }
 
     if (stepSatisfiesSubtask(current, intent, outcome, worldState)) {
+      if (current.id.startsWith("locate_")) {
+        this.satisfiedDestinationLocates.add(current.id);
+      }
       this.completed.push(this.pending.shift() as Subtask);
       this.reconcile(worldState);
+      this.advanceInventorySatisfiedHeads(worldState);
       return;
     }
 
-    if (outcome.status === "failed") {
+    if (outcome.status === "failed" && !options.skipFailureHeuristics) {
       const craftItem = String(intent.candidateAction.arguments.item ?? "");
       if (
         intent.candidateAction.name === "craft" &&
@@ -611,8 +810,54 @@ export class TaskStackService {
         }
       }
 
+      const collectTarget = current.targetItem ?? String(intent.candidateAction.arguments.block_type ?? "");
+      if (
+        intent.candidateAction.name === "collect" &&
+        collectFailureNeedsLocate(collectTarget, outcome.failureReason, worldState)
+      ) {
+        const locateTasks = expandAccessPrerequisites(
+          { ...current, expectedAction: "collect", targetItem: collectTarget },
+          worldState,
+        );
+        if (locateTasks.length > 0) {
+          this.registerTasks(locateTasks);
+          this.pending = [...locateTasks, current, ...this.pending.slice(1)];
+          return;
+        }
+      }
+
+      if (
+        intent.candidateAction.name === "place" &&
+        placeFailureNeedsLocateDestination(outcome.failureReason, current, worldState)
+      ) {
+        const destinationSpec = inferDestinationRequirement(current);
+        if (destinationSpec) {
+          this.satisfiedDestinationLocates.delete(`locate_${destinationSpec.id}`);
+        }
+        const locateTasks = expandDestinationPrerequisites(current, worldState, this.satisfiedDestinationLocates);
+        if (locateTasks.length > 0) {
+          this.registerTasks(locateTasks);
+          this.pending = [...locateTasks, current, ...this.pending.slice(1)];
+          return;
+        }
+      }
+
       if (current.compound) {
-        this.pending = [...expandCompoundSubtask(current, worldState), ...this.pending.slice(1)];
+        this.pending = [...expandCompoundSubtask(current, worldState, this.satisfiedDestinationLocates), ...this.pending.slice(1)];
+        return;
+      }
+    }
+
+    if (verification && !options.skipFailureHeuristics) {
+      const locateTasks = verificationNeedsLocateSubtask(
+        verification.issueTags,
+        current,
+        worldState,
+        this.satisfiedDestinationLocates,
+      );
+      if (locateTasks.length > 0) {
+        this.registerTasks(locateTasks);
+        this.pending = [...locateTasks, current, ...this.pending.slice(1)];
         return;
       }
     }
@@ -654,11 +899,29 @@ export class TaskStackService {
   }
 
   private isSatisfiedByWorld(subtask: Subtask, worldState: WorldState): boolean {
-    return (
-      subtask.expectedAction === "craft" &&
-      Boolean(subtask.targetItem) &&
-      countInventoryItem(worldState.inventory, subtask.targetItem as string) >= 1
-    );
+    if (subtaskCompletesFromInventory(subtask, worldState)) {
+      return true;
+    }
+
+    if (!subtask.targetItem) {
+      return false;
+    }
+
+    if (
+      (subtask.expectedAction === "craft" || subtask.expectedAction === "collect") &&
+      subtaskRequirementMet(subtask, worldState.inventory)
+    ) {
+      return true;
+    }
+
+    if (
+      (subtask.expectedAction === "place" || subtask.expectedAction === "use") &&
+      inventoryHasItem(worldState.inventory, subtask.targetItem)
+    ) {
+      return false;
+    }
+
+    return false;
   }
 
   private registerTasks(tasks: Subtask[]): void {
@@ -712,18 +975,22 @@ export class TaskStackService {
   }
 
   private expandPendingHead(worldState: WorldState): void {
+    if (this.llmPlanned) {
+      return;
+    }
+
     while (this.pending[0]?.compound) {
       const head = this.pending[0];
       if (!head) {
         return;
       }
 
-      if (inventoryMeetsFocus(head.planningFocus, worldState.inventory)) {
+      if (inventoryMeetsFocus(head.planningFocus, worldState.inventory, head.targetItem)) {
         this.completed.push(this.pending.shift() as Subtask);
         continue;
       }
 
-      const expanded = expandCompoundSubtask(head, worldState);
+      const expanded = expandCompoundSubtask(head, worldState, this.satisfiedDestinationLocates);
       this.registerTasks(expanded);
       if (expanded.length === 1 && expanded[0]?.id === head.id) {
         return;
@@ -739,6 +1006,22 @@ export class TaskStackService {
     const head = this.pending[0];
     if (!head) {
       return;
+    }
+
+    const accessPrerequisites = expandAccessPrerequisites(head, worldState);
+    if (accessPrerequisites.length > 0) {
+      this.registerTasks(accessPrerequisites);
+      this.pending = [...accessPrerequisites, ...this.pending.slice(1)];
+      return;
+    }
+
+    if (head.expectedAction === "place" || head.expectedAction === "use") {
+      const withObtain = expandGoalPrerequisites(head, worldState, this.satisfiedDestinationLocates);
+      if (withObtain.length > 1) {
+        this.registerTasks(withObtain);
+        this.pending = [...withObtain, ...this.pending.slice(1)];
+        return;
+      }
     }
 
     const craftItem = extractCraftItemFromFocus(head.planningFocus);

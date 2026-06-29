@@ -118,6 +118,47 @@ export const rolloutSchema = {
   required: ["futures"],
 };
 
+const taskSubtaskItemSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    id: { type: "string" },
+    description: { type: "string" },
+    planningFocus: { type: "string" },
+    expectedAction: { type: "string" },
+    targetItem: { type: "string" },
+    targetCount: { type: "number" },
+    destination: { type: "string" },
+  },
+  required: ["id", "description", "planningFocus", "expectedAction", "targetItem", "targetCount", "destination"],
+};
+
+export const taskDecompositionSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    reasoning: { type: "string" },
+    subtasks: {
+      type: "array",
+      items: taskSubtaskItemSchema,
+    },
+  },
+  required: ["reasoning", "subtasks"],
+};
+
+export const taskRefinementSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    reasoning: { type: "string" },
+    prerequisiteSubtasks: {
+      type: "array",
+      items: taskSubtaskItemSchema,
+    },
+  },
+  required: ["reasoning", "prerequisiteSubtasks"],
+};
+
 export const criticSchema = {
   type: "object",
   additionalProperties: false,

@@ -76,6 +76,11 @@ export class VerificationService {
       suggestedFixes.add("place or move to a reachable furnace before retrying the smelting step.");
     }
 
+    if (failureReason.includes("no reachable water") || failureReason.includes("no reachable interaction")) {
+      issueTags.add("destination_not_accessible");
+      suggestedFixes.add("locate the required destination, such as water, before retrying the placement.");
+    }
+
     if (failureReason.includes("unable to find a valid nearby placement spot") || failureReason.includes("placement did not result")) {
       issueTags.add("placement_access_problem");
       suggestedFixes.add("change stance, clear space, or select a different nearby placement target before retrying placement.");

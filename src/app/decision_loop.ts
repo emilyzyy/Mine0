@@ -11,6 +11,7 @@ import { MemoryService } from "../memory/memory_service.ts";
 import { PerceptionService } from "../perception/perception_service.ts";
 import { loadPlannerConfig } from "../shared/config.ts";
 import { PlannerService, proposalToPredictedFuture } from "../planner/planner_service.ts";
+import { TaskDecompositionService } from "../planner/task_decomposition_service.ts";
 import { TaskStackService } from "../planner/task_stack_service.ts";
 import { makeId } from "../shared/ids.ts";
 import { appendJsonLine, isoNow } from "../shared/logger.ts";
@@ -32,6 +33,7 @@ export interface RunCycleHooks {
 export class Mine0App {
   private readonly memory = new MemoryService();
   private readonly planner = new PlannerService();
+  private readonly taskDecomposition = new TaskDecompositionService();
   private readonly taskStack = new TaskStackService();
   private readonly perception = new PerceptionService();
   private readonly verifier = new VerificationService();
@@ -55,7 +57,10 @@ export class Mine0App {
       let latestObservation = await executor.observe(input.objective);
       let latestWorldState = parseWorldState(latestObservation.worldState);
 
-      this.taskStack.reset(input.objective, latestWorldState);
+      const decomposition = await this.taskDecomposition.decomposeObjective(input.objective, latestWorldState);
+      this.taskStack.reset(input.objective, latestWorldState, {
+        llmSubtasks: decomposition.subtasks?.length ? decomposition.subtasks : undefined,
+      });
 
       if (this.isObjectiveComplete(input.objective, latestWorldState.inventory, placedCraftingTable, placedDoor, placedDoorCount)) {
         completedObjective = true;
@@ -138,7 +143,31 @@ export class Mine0App {
 
         latestObservation = await executor.observe(input.objective);
         latestWorldState = parseWorldState(latestObservation.worldState);
-        this.taskStack.onStepComplete(selectedIntent, actionOutcome, latestWorldState);
+
+        let llmRefined = false;
+        if (actionOutcome.status === "failed" && this.taskStack.isLlmPlanned()) {
+          const taskContext = this.taskStack.getContext();
+          const refinement = await this.taskDecomposition.refineOnFailure(
+            input.objective,
+            taskContext,
+            actionOutcome.failureReason ?? "unknown failure",
+            latestWorldState,
+            selectedIntent,
+          );
+          if (refinement.subtasks.length > 0) {
+            this.taskStack.prependSubtasks(refinement.subtasks);
+            this.taskStack.reconcile(latestWorldState);
+            llmRefined = true;
+          }
+        }
+
+        this.taskStack.onStepComplete(
+          selectedIntent,
+          actionOutcome,
+          latestWorldState,
+          verification,
+          { skipFailureHeuristics: llmRefined },
+        );
         const failureSignature = makeFailureSignature(selectedIntent, actionOutcome);
         if (failureSignature && failureSignature === previousFailureSignature) {
           repeatedFailureCount += 1;
@@ -277,7 +306,7 @@ export class Mine0App {
   private toIntent(objective: string, future: PredictedFuture): SubgoalIntent {
     return {
       objective,
-      instruction: describeInstruction(future),
+      instruction: future.predictedSteps[0]?.action ?? future.strategy,
       candidateAction: future.candidateAction,
       successCondition: {
         item: String(future.candidateAction.arguments.block_type ?? future.candidateAction.arguments.item ?? "oak_log"),
@@ -390,6 +419,11 @@ function isMeaningfulProgress(
 }
 
 function describeInstruction(future: PredictedFuture): string {
+  const planned = future.predictedSteps[0]?.action;
+  if (planned) {
+    return planned;
+  }
+
   const action = future.candidateAction;
   switch (action.name) {
     case "collect":
@@ -403,11 +437,11 @@ function describeInstruction(future: PredictedFuture): string {
     case "scan":
       return `Scan ${action.arguments.direction ?? "forward"} for resources and hazards`;
     case "explore":
-      return `Explore ${action.arguments.direction ?? "forward"} to improve position`;
+      return `Explore ${action.arguments.direction ?? "forward"}`;
     case "place":
       return `Place ${action.arguments.block_type ?? "block"} at ${action.arguments.location ?? "target location"}`;
     default:
-      return future.predictedSteps[0]?.action ?? future.strategy;
+      return future.strategy;
   }
 }
 
