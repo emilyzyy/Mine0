@@ -7,3 +7,5 @@ artifacts/videos/
 .DS_Store
 .env
 node_modules/
+video/node_modules/
+video/out/
